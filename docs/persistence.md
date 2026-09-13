@@ -4,11 +4,11 @@
 
 | Storage | Owner | Meaning |
 | --- | --- | --- |
-| `savedConfigs.dat` | CamillaNode saved-config API | Collection of user presets, including historical `global-eq` and `estack-system` records |
+| `savedConfigs.dat` | E-Stack DSP saved-config API | Collection of user presets, including historical `global-eq` and `estack-system` records |
 | `startupConfig.json` | Startup Configuration service | Startup mode (`yaml`, `specific`, `last`) and last/active system preset metadata |
-| `currentConfig.json` | CamillaNode | Current named configuration selection metadata |
-| `config/*.json` | CamillaNode | Named configuration records |
-| `camillaNodeConfig.json` | CamillaNode deployment | Application HTTP port/runtime configuration |
+| `currentConfig.json` | E-Stack DSP | Current named configuration selection metadata |
+| `config/*.json` | E-Stack DSP | Named configuration records |
+| `camillaNodeConfig.json` | E-Stack DSP compatibility | Application HTTP port/runtime configuration; filename intentionally retained |
 | `wiimLoudnessConfig.json` | WiiM integration | Machine-local bridge/settings configuration; preserved by deployment |
 
 `estack-system` records are full processing snapshots used by the server-owned

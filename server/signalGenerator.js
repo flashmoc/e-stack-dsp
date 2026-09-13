@@ -268,7 +268,7 @@ module.exports = function installEStackSignalGenerator(app, options = {}) {
         };
 
         // Persist the exact normal configuration before touching CamillaDSP. If
-        // CamillaNode is restarted while a tone is active, startup recovery can
+        // E-Stack DSP is restarted while a tone is active, startup recovery can
         // restore the normal capture device and mixer routing.
         writeSnapshotFile(original, metadata);
         try {
@@ -343,7 +343,7 @@ module.exports = function installEStackSignalGenerator(app, options = {}) {
             try {
                 const current = await getConfig();
                 if (current?.devices?.capture?.type === 'SignalGenerator') {
-                    await restoreFromRecord(record, 'CamillaNode restart recovery');
+                    await restoreFromRecord(record, 'E-Stack DSP restart recovery');
                     console.warn('E-Stack restored normal capture after a stale test signal.');
                 } else {
                     clearSnapshotFile();

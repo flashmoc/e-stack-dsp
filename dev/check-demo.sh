@@ -62,12 +62,12 @@ check_once() {
         return 1
     fi
     if ! port_reachable 8080; then
-        LAST_FAILURE='CamillaNode is not reachable on 127.0.0.1:8080'
+        LAST_FAILURE='E-Stack DSP is not reachable on 127.0.0.1:8080'
         return 1
     fi
 
     if ! product="$(curl --fail --silent --max-time 5 http://127.0.0.1:8080/estack-dsp/)"; then
-        LAST_FAILURE='E-Stack DSP product route did not respond on CamillaNode.'
+        LAST_FAILURE='E-Stack DSP product route did not respond.'
         return 1
     fi
     if [[ "$product" != *'pageFrame'* || "$product" != *'<title>E-Stack DSP</title>'* ]]; then
@@ -81,11 +81,11 @@ check_once() {
     fi
 
     if ! runtime="$(curl --fail --silent --max-time 5 http://127.0.0.1:8080/api/runtime)"; then
-        LAST_FAILURE='CamillaNode /api/runtime did not respond.'
+        LAST_FAILURE='E-Stack DSP /api/runtime did not respond.'
         return 1
     fi
     if ! runtime_error="$(runtime_is_canonical_demo "$runtime" 2>&1)"; then
-        LAST_FAILURE="${runtime_error:-CamillaNode /api/runtime is not the canonical demo runtime.}"
+        LAST_FAILURE="${runtime_error:-E-Stack DSP /api/runtime is not the canonical demo runtime.}"
         return 1
     fi
 }
@@ -108,7 +108,7 @@ done
 echo 'OK:   CamillaDSP main reachable on 1234'
 echo 'OK:   CamillaDSP spectrum reachable on 6413'
 echo 'OK:   CamillaGUI reachable on 5005 and its HTTP route responds'
-echo 'OK:   CamillaNode reachable on 8080'
+echo 'OK:   E-Stack DSP reachable on 8080'
 echo 'OK:   E-Stack DSP product route responds'
-echo 'OK:   CamillaNode reports the canonical demo runtime'
+echo 'OK:   E-Stack DSP reports the canonical demo runtime'
 echo "Demo logs: ${LOG_DIR}"

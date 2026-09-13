@@ -138,13 +138,13 @@ fi
 npm ci --omit=dev --no-audit --no-fund
 npm run check
 
-if command -v systemctl >/dev/null 2>&1 && systemctl cat camillanode.service >/dev/null 2>&1; then
-    echo "Restarting camillanode.service..."
-    sudo systemctl restart camillanode.service
+if command -v systemctl >/dev/null 2>&1 && systemctl cat estack-dsp.service >/dev/null 2>&1; then
+    echo "Restarting estack-dsp.service..."
+    sudo systemctl restart estack-dsp.service
 
-    if ! sudo systemctl is-active --quiet camillanode.service; then
-        echo "ERROR: camillanode.service did not become active." >&2
-        sudo systemctl --no-pager --full status camillanode.service || true
+    if ! sudo systemctl is-active --quiet estack-dsp.service; then
+        echo "ERROR: estack-dsp.service did not become active." >&2
+        sudo systemctl --no-pager --full status estack-dsp.service || true
         exit 1
     fi
 
@@ -169,12 +169,12 @@ NODE
     done
 
     if [[ "$HEALTH_OK" -ne 1 ]]; then
-        echo "ERROR: CamillaNode service is active but /api/runtime is not healthy on port $PORT." >&2
-        sudo journalctl -u camillanode.service -n 60 --no-pager || true
+        echo "ERROR: E-Stack DSP service is active but /api/runtime is not healthy on port $PORT." >&2
+        sudo journalctl -u estack-dsp.service -n 60 --no-pager || true
         exit 1
     fi
 else
-    echo "NOTE: camillanode.service not found; repository updated but no service was restarted."
+    echo "NOTE: estack-dsp.service not found; repository updated but no service was restarted."
 fi
 
 printf '\nUpdate complete.\n'

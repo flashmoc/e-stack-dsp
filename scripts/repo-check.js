@@ -37,6 +37,9 @@ const required = [
     'scripts/install-wiim-loudness.sh',
     'scripts/reapply-startup.js',
     'scripts/install-startup-recall.sh',
+    'scripts/pi-migrate-standalone.sh',
+    'scripts/pi-migrate-standalone-rollback.sh',
+    'docs/standalone-runtime.md',
     'scripts/measurement-batch-selftest.js',
     'wiimLoudnessConfig.example.json',
     'examples/measurement-batch-kick-mid.example.json',
@@ -252,7 +255,11 @@ if (!startupRecallSource.includes('startupConfiguration.applyRecord(record)')) f
 if (!startupRecallSource.includes('lastBootIdApplied')) fail('CamillaDSP restart recall does not synchronize boot recall state');
 const startupInstallerSource = fs.readFileSync(path.join(ROOT, 'scripts', 'install-startup-recall.sh'), 'utf8');
 if (!startupInstallerSource.includes('ExecStartPost=')) fail('startup recall installer is missing CamillaDSP ExecStartPost');
-if (!startupInstallerSource.includes('After=camilladsp.service')) fail('startup recall installer is missing CamillaNode boot ordering');
+if (!startupInstallerSource.includes('After=camilladsp.service')) fail('startup recall installer is missing E-Stack DSP boot ordering');
+if (!startupInstallerSource.includes('estack-dsp.service.d')) fail('startup recall installer is not standalone');
+const standaloneInstaller = fs.readFileSync(path.join(ROOT, 'scripts', 'pi-install.sh'), 'utf8');
+if (!standaloneInstaller.includes('/etc/systemd/system/estack-dsp.service')) fail('standalone service installer is missing');
+if (standaloneInstaller.includes('/etc/systemd/system/camillanode.service')) fail('installer still owns legacy CamillaNode service');
 
 for (const htmlName of ['equalizer.html', 'global-eq.html', 'advanced.html']) {
     const html = fs.readFileSync(path.join(PUBLIC, 'html', htmlName), 'utf8');
@@ -292,7 +299,7 @@ for (const file of [
 
 for (const file of ['scripts/install-wiim-loudness.sh', 'scripts/install-startup-recall.sh']) {
     try {
-        execFileSync('bash', ['-n', path.join(ROOT, file)], { stdio: 'pipe' });
+        execFileSync('bash', ['-n', file], { cwd: ROOT, stdio: 'pipe' });
     } catch (error) {
         fail(`shell syntax check failed for ${file}: ${String(error.stderr || error.message).trim()}`);
     }

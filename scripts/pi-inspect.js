@@ -154,11 +154,15 @@ function topology(config) {
   report('WARN', 'Physical routing, limiter calibration and crossover acoustics require hardware acceptance; presence is not calibration');
   return findings;
 }
-function serviceSafety() {
-  const props = run('systemctl', ['show', 'camillanode.service', '--no-pager']);
+function serviceSafety(options = {}) {
+  const service = options.service || 'estack-dsp.service';
+  const expectedRoot = path.resolve(options.root || ROOT);
+  const legacy = options.legacy === true;
+  const systemctl = options.runSystemctl || (args => run('systemctl', args));
+  const props = systemctl(['show', service, '--no-pager']);
   const values = Object.fromEntries(props.split('\n').map(s => [s.slice(0, s.indexOf('=')), s.slice(s.indexOf('=') + 1)]));
-  if (values.LoadState !== 'loaded') throw Error('camillanode.service not loaded');
-  if (values.WorkingDirectory?.replace(/\/$/, '') !== ROOT) throw Error('Service WorkingDirectory differs from selected repository');
+  if (values.LoadState !== 'loaded') throw Error(`${service} not loaded`);
+  if (values.WorkingDirectory?.replace(/\/$/, '') !== expectedRoot) throw Error('Service WorkingDirectory differs from selected repository');
   for (const key of ['ExecCondition', 'ExecStartPre', 'ExecStartPost', 'ExecStop', 'ExecStopPost', 'OnFailure', 'OnSuccess', 'PropagatesStopTo', 'ConsistsOf', 'BoundBy', 'RequiredBy', 'TriggeredBy', 'Upholds', 'UpheldBy', 'EnvironmentFiles', 'RootDirectory', 'RootImage', 'BindPaths', 'BindReadOnlyPaths']) {
     if (values[key]) throw Error(`Service ${key} requires separate manual audit; RC refuses automatic restart`);
   }
@@ -170,22 +174,40 @@ function serviceSafety() {
     const env = fs.readFileSync(`/proc/${values.MainPID}/environ`, 'utf8');
     if (envPattern.test(env) || /ESTACK_/.test(env)) throw Error('Running service environment overrides require separate audit');
   }
-  const executable = /path=([^ ;]+)/.exec(values.ExecStart || '')?.[1];
-  if (!executable || !values.ExecStart.includes(`${ROOT}/index.js`) || !/^node(?:js)?$/.test(path.basename(executable))) throw Error('Nonstandard CamillaNode ExecStart requires manual audit');
-  const argv = /argv\[\]=([^;]+)/.exec(values.ExecStart)?.[1]?.trim();
-  if (argv !== `${executable} ${ROOT}/index.js`) throw Error('Additional service arguments require manual audit');
+  const executable = /path=(.*?) ;/.exec(values.ExecStart || '')?.[1];
+  const expectedEntry = path.join(expectedRoot, 'index.js');
+  if (!executable || !values.ExecStart.includes(expectedEntry) || !/^node(?:js)?(?:\.exe)?$/i.test(path.basename(executable))) throw Error(`Nonstandard ${service} ExecStart requires manual audit`);
+  const argv = /argv\[\]=(.*?)(?: ;|$)/.exec(values.ExecStart)?.[1]?.trim();
+  if (argv !== `${executable} ${expectedEntry}`) throw Error('Additional service arguments require manual audit');
   for (const unit of new Set(`${values.Requires || ''} ${values.Wants || ''} ${values.Requisite || ''}`.split(/\s+/).filter(Boolean))) {
-    if (run('systemctl', ['is-active', '--', unit]) !== 'active') throw Error(`Inactive dependency ${unit}; restart could start another integration`);
+    if (systemctl(['is-active', '--', unit]) !== 'active') throw Error(`Inactive dependency ${unit}; restart could start another integration`);
   }
   const version = run(executable, ['--version']);
   if (nodeStatus(version) === 'FAIL') throw Error(`Service Node ${version} is unsupported`);
   if (fs.realpathSync(executable) !== fs.realpathSync(process.execPath)) throw Error('Shell Node and systemd Node differ; use service Node in PATH');
-  if (run('systemctl', ['is-active', '--', 'camilladsp.service']) !== 'active') throw Error('Main DSP service not active');
+  if (systemctl(['is-active', '--', 'camilladsp.service']) !== 'active') throw Error('Main DSP service not active');
   // A running old bridge keeps old code in memory during checkout. Defer its
   // integration rather than stopping/restarting it as an implicit side effect.
-  try { if (run('systemctl', ['is-active', '--', 'estack-wiim-loudness.service']) === 'active') throw Error('WiiM bridge active: separate maintenance acceptance required'); }
+  try { if (!options.allowWiim && systemctl(['is-active', '--', 'estack-wiim-loudness.service']) === 'active') throw Error('WiiM bridge active: separate maintenance acceptance required'); }
   catch (e) { if (!e.status) throw e; }
-  console.error(`PASS: CamillaNode restart boundary; service Node ${version}`);
+  console.error(`PASS: ${legacy ? 'legacy migration source' : 'E-Stack DSP'} restart boundary; service Node ${version}`);
+}
+
+function startupResolvable(root) {
+  const state = read(path.join(root, 'startupConfig.json'), { mode: 'yaml' });
+  if (state.mode === 'yaml') return { state, record: null };
+  if (!['specific', 'last'].includes(state.mode)) throw Error(`Invalid startup mode ${state.mode}`);
+  const records = read(path.join(root, 'savedConfigs.dat'), []);
+  if (!Array.isArray(records)) throw Error('savedConfigs.dat is invalid');
+  const id = state.mode === 'specific' ? state.configId : state.lastUsedId;
+  const name = state.mode === 'specific' ? state.configName : state.lastUsedName;
+  const record = records.find(item => item?.type === 'estack-system' &&
+    ((id !== undefined && id !== null && String(item.id) === String(id)) || (name && item.name === name)));
+  if (!record?.data?.processing) throw Error(`Startup ${state.mode} target is missing or invalid`);
+  let bootId = null;
+  try { bootId = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch (_) { /* non-Linux test */ }
+  if (!bootId || state.lastBootIdApplied !== bootId) throw Error('Startup preset is resolvable but not recorded as applied for this boot; migration would risk a DSP recall');
+  return { state, record };
 }
 function inventory(base) {
   const result = {};
@@ -230,6 +252,62 @@ async function main(mode, directory) {
     return;
   }
   if (mode === 'service-safety') return serviceSafety();
+  if (mode === 'migration-service-safety') {
+    const legacyRoot = path.resolve(directory || process.env.ESTACK_LEGACY_ROOT || '/home/bastos/camillanode');
+    return serviceSafety({ service: 'camillanode.service', root: legacyRoot, legacy: true, allowWiim: true });
+  }
+  if (mode === 'startup-resolvable') {
+    console.log(JSON.stringify(startupResolvable(path.resolve(directory || ROOT)), null, 2));
+    return;
+  }
+  if (mode === 'compare-runtime') {
+    const source = path.resolve(directory || '');
+    const target = path.resolve(process.argv[4] || '');
+    if (JSON.stringify(inventory(source)) !== JSON.stringify(inventory(target))) throw Error('Staged runtime state differs from migration source');
+    console.log('PASS: staged runtime bytes and modes match migration source');
+    return;
+  }
+  if (mode === 'compare-dsp-evidence') {
+    const evidence = read(path.join(path.resolve(directory || ''), 'dsp-evidence.json'));
+    const live = await dsp();
+    if (!evidence || JSON.stringify(live.config) !== JSON.stringify(evidence.config) || live.volume !== evidence.volume) {
+      throw Error('Live DSP configuration or Master differs from the pre-migration evidence');
+    }
+    console.log('PASS: live DSP configuration and Master match pre-migration evidence');
+    return;
+  }
+  if (mode === 'migration-preflight') {
+    const legacyRoot = path.resolve(directory || '/home/bastos/camillanode');
+    if (legacyRoot !== ROOT) throw Error('Migration inspection root mismatch');
+    if (port() !== 8080) throw Error(`Standalone migration requires preserved HTTP port 8080, found ${port()}`);
+    serviceSafety({ service: 'camillanode.service', root: legacyRoot, legacy: true, allowWiim: true });
+    const resolved = startupResolvable(legacyRoot);
+    console.log(`PASS: startup ${resolved.state.mode}${resolved.record ? ` -> ${resolved.record.name}` : ''} is resolved for this boot`);
+    temporary(legacyRoot);
+    const live = await dsp();
+    const findings = topology(live.config);
+    findings.forEach(x => console.log(`${x.level}: ${x.message}`));
+    if (findings.some(x => x.level === 'FAIL')) throw Error('Missing required operator/protection topology');
+    await request('ws://127.0.0.1:6413', 'GetState');
+    for (const route of ['/api/test-signal/status', '/api/measurement-batch/status']) {
+      const state = JSON.parse(await get(route));
+      if (state.active || state.phase === 'active') throw Error(`Active temporary workflow: ${route}`);
+    }
+    console.log('PASS: standalone migration preflight is read-only and complete');
+    return;
+  }
+  if (mode === 'migration-offline-safety') {
+    const legacyRoot = path.resolve(directory || '/home/bastos/camillanode');
+    if (legacyRoot !== ROOT) throw Error('Migration inspection root mismatch');
+    startupResolvable(legacyRoot);
+    temporary(legacyRoot);
+    const live = await dsp();
+    const findings = topology(live.config);
+    if (findings.some(x => x.level === 'FAIL')) throw Error('Required topology changed during migration staging');
+    await request('ws://127.0.0.1:6413', 'GetState');
+    console.log('PASS: offline startup/workflow/DSP/spectrum state remains safe');
+    return;
+  }
   if (mode === 'offline-safety') { startup(path.join(ROOT, 'startupConfig.json')); temporary(); await dsp(); return; }
   if (mode === 'backup') {
     const live = await dsp();
@@ -291,5 +369,5 @@ async function main(mode, directory) {
   }
   throw Error('Unknown inspection operation');
 }
-module.exports = { nodeStatus, startup, temporary, topology, inventory, validateBackup, request, get, RUNTIME, READ_COMMANDS, main };
+module.exports = { nodeStatus, startup, startupResolvable, temporary, topology, inventory, validateBackup, request, get, RUNTIME, READ_COMMANDS, serviceSafety, main };
 if (require.main === module) main(process.argv[2], process.argv[3]).catch(e => { console.error(`FAIL: ${e.message}`); process.exitCode = 1; });

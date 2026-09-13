@@ -44,7 +44,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.static(PUBLIC_DIR));
 
-// E-Stack DSP is the product surface built on the established CamillaNode
+// E-Stack DSP is the product surface built on the established server
 // runtime. It deliberately shares this origin, HTTP port and the /ws/dsp
 // proxy with the legacy E-Stack UI so no browser ever reaches DSP port 1234
 // directly.
@@ -89,7 +89,7 @@ app.get('/api/runtime', (_req, res) => {
     });
 });
 
-// WiiM loudness status/settings stay on the CamillaNode origin. The real-time
+// WiiM loudness status/settings stay on the E-Stack DSP origin. The real-time
 // bridge is an independent Raspberry service and keeps running without a browser.
 require('./server/wiimLoudnessApi')(app, { root: ROOT });
 
@@ -104,7 +104,7 @@ require('./server/signalGenerator')(app, {
 // Measurement Batch orchestrates repeatable REW campaigns. It never owns the
 // hardware devices or mixer routing: each step is rebuilt from a captured live
 // processing baseline, applied with a safe master-volume transition and restored
-// on completion/abort or after a same-boot CamillaNode restart.
+// on completion/abort or after a same-boot E-Stack DSP restart.
 require('./server/measurementBatch')(app, {
     WebSocket,
     host: DSP_HOST,
@@ -125,7 +125,7 @@ const startupConfiguration = require('./server/startupConfiguration')(app, {
     demo: DEMO_MODE
 });
 
-// Codespaces only: keep CamillaGUI on the CamillaNode origin. Raspberry installs
+// Codespaces only: keep CamillaGUI on the E-Stack DSP origin. Raspberry installs
 // use CamillaGUI directly and never enter this proxy path.
 const camillaGuiProxyEnabled = DEMO_MODE;
 const camillaGuiProxyHost = process.env.CAMILLAGUI_PROXY_HOST || '127.0.0.1';
@@ -297,7 +297,7 @@ app.get('/deleteConfig', (req, res) => {
     }
 });
 
-// Same-origin WebSocket proxy. Browser clients talk only to CamillaNode; the
+// Same-origin WebSocket proxy. Browser clients talk only to E-Stack DSP; the
 // server forwards to the local CamillaDSP processes over loopback.
 const server = http.createServer(app);
 const proxyWss = new WebSocket.Server({ noServer: true });
@@ -378,6 +378,6 @@ server.on('upgrade', (request, socket, head) => {
 
 server.listen(PORT, () => {
     const mode = DEMO_MODE ? ' [E-Stack demo]' : '';
-    console.log(`CamillaNode is running on port ${PORT}${mode}...`);
+    console.log(`E-Stack DSP is running on port ${PORT}${mode}...`);
     startupConfiguration.scheduleBootApply();
 });

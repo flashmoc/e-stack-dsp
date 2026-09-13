@@ -1,6 +1,8 @@
-# E-Stack CamillaNode
+# E-Stack DSP
 
-E-Stack CamillaNode is a focused web control layer for a multi-way CamillaDSP loudspeaker system. This branch keeps the useful CamillaNode core but removes the old headphone/AutoEQ-oriented surface and adds speaker-management, measurement and protection workflows.
+E-Stack DSP is a standalone web control application for a multi-way CamillaDSP
+loudspeaker system. It provides speaker management, measurement and protection
+workflows through the existing CamillaDSP runtime.
 
 ## Current UI
 
@@ -9,7 +11,7 @@ E-Stack CamillaNode is a focused web control layer for a multi-way CamillaDSP lo
 - **Input Processing** — global L/R PEQ and input delay.
 - **Output Processing** — per-way crossover, PEQ, gain, delay, polarity, phase, dynamics/limiter, magnitude graph, phase graph and XO Align.
 - **Signal Generator** — protected internal sine or full-band white-noise source with per-way routing and automatic restore.
-- **Advanced** — direct CamillaDSP pipeline inspection/editing.
+- **Advanced** — read-only live CamillaDSP topology inspection.
 - **Preferences / Connections** — E-Stack UI and DSP endpoints.
 
 The internal test generator is injected as the CamillaDSP **capture source**, so the test signal traverses the real downstream chain:
@@ -21,7 +23,7 @@ For REW sweeps, leave the internal generator off and send the REW sweep through 
 ## Repository layout
 
 ```text
-index.js                     CamillaNode HTTP/WebSocket server
+index.js                     E-Stack DSP HTTP/WebSocket server
 server/                      server-only E-Stack features
 public/html/                 active pages
 public/src/                  browser DSP/UI modules
@@ -51,22 +53,29 @@ ports, logs, restart procedure and the separate Raspberry acceptance boundary.
 
 This repository deliberately does **not** install, replace or reconfigure CamillaDSP, ALSA, the RASPIAUDIO device or the DSP YAML during an application update.
 
-For an existing E-Stack checkout:
+For an existing standalone E-Stack DSP checkout:
 
 ```bash
-cd ~/camillanode
+cd /home/bastos/e-stack-dsp
 bash pi-update.sh
 ```
 
-The updater preserves machine-local runtime state, performs a fast-forward-only Git update, installs production Node dependencies, runs repository checks, restarts `camillanode.service` when present and verifies `/api/runtime`.
+The updater preserves machine-local runtime state, performs a fast-forward-only
+Git update, installs production Node dependencies, runs repository checks,
+restarts `estack-dsp.service` when present and verifies `/api/runtime`.
 
-For a fresh CamillaNode application/service install after cloning the repository:
+For a fresh standalone application/service install after cloning the repository:
 
 ```bash
+git clone https://github.com/flashmoc/e-stack-dsp.git /home/bastos/e-stack-dsp
+cd /home/bastos/e-stack-dsp
 bash setup.sh
 ```
 
-See [docs/raspberry.md](docs/raspberry.md) before a first hardware deployment.
+Existing `/home/bastos/camillanode` installations must use the guarded
+[standalone migration](docs/standalone-runtime.md), which retains the old root
+and service for rollback. See [docs/raspberry.md](docs/raspberry.md) before a
+hardware deployment.
 
 ## Documentation and architecture
 

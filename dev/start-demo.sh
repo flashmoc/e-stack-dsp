@@ -114,7 +114,7 @@ stop_previous_demo() {
     # This script only runs with ESTACK_DEMO_CONTEXT=1, set by the Dev Container.
     # PID files plus /proc command verification prevent broad host/process cleanup.
     stop_pid_file "$RUN_DIR/launcher.pid" 'launcher'
-    stop_pid_file "$RUN_DIR/camillanode.pid" 'CamillaNode'
+    stop_pid_file "$RUN_DIR/camillanode.pid" 'E-Stack DSP'
     stop_pid_file "$RUN_DIR/camillagui.pid" 'CamillaGUI'
     stop_pid_file "$RUN_DIR/spectrum.pid" 'spectrum CamillaDSP'
     stop_pid_file "$RUN_DIR/main.pid" 'main CamillaDSP'
@@ -276,7 +276,7 @@ validate_config "30-band spectrum" "$SPECTRUM_CONFIG"
 
 cd "$ROOT_DIR"
 if [[ ! -d node_modules ]]; then
-    echo "Installing CamillaNode dependencies..."
+    echo "Installing E-Stack DSP dependencies..."
     npm install --no-audit --no-fund
 fi
 
@@ -379,18 +379,18 @@ PY
     sleep 0.1
 done
 
-# Start the existing CamillaNode backend last. It owns the browser-facing
+# Start the E-Stack DSP backend last. It owns the browser-facing
 # WebSocket proxies; ports 1234/6413 stay internal to this Linux demo stack.
 node "$ROOT_DIR/index.js" >"$LOG_DIR/camillanode.log" 2>&1 &
 NODE_PID=$!
 echo "$NODE_PID" > "$RUN_DIR/camillanode.pid"
-if ! wait_for_port 8080 "CamillaNode"; then
-    echo "CamillaNode exited before opening port 8080:" >&2
+if ! wait_for_port 8080 "E-Stack DSP"; then
+    echo "E-Stack DSP exited before opening port 8080:" >&2
     cat "$LOG_DIR/camillanode.log" >&2 || true
     exit 1
 fi
 if ! kill -0 "$NODE_PID" >/dev/null 2>&1; then
-    echo "CamillaNode exited unexpectedly:" >&2
+    echo "E-Stack DSP exited unexpectedly:" >&2
     cat "$LOG_DIR/camillanode.log" >&2 || true
     exit 1
 fi
@@ -399,7 +399,7 @@ printf '\nE-Stack Linux demo is ready:\n'
 printf '  Demo input:    CH1/CH2 noise @ -30 dBFS; CH3-CH8 digital silence\n'
 printf '  Main DSP:      ws://127.0.0.1:1234\n'
 printf '  Spectrum DSP:  ws://127.0.0.1:6413\n'
-printf '  CamillaNode:   http://localhost:8080\n'
+printf '  E-Stack DSP:   http://localhost:8080\n'
 printf '  CamillaGUI:    http://localhost:5005/gui/index.html\n'
 if [[ -n "${CODESPACE_NAME:-}" && -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]]; then
     printf '  Node browser:  https://%s-8080.%s\n' "$CODESPACE_NAME" "$GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN"

@@ -3,7 +3,7 @@
 ## Product boundary
 
 **E-Stack DSP** is the canonical frontend for E-Stack. Its mount point
-is `/estack-dsp/`, served by the existing CamillaNode Node process. The legacy
+is `/estack-dsp/`, served by the standalone E-Stack DSP Node process. The legacy
 frontend remains temporarily in the repository as a behavioral specification;
 it is not a runtime dependency of the product and must not be extended as the
 future architecture.
@@ -17,7 +17,7 @@ shared E-Stack domain / services
     ↓
 EStackDSPBridge
     ↓
-same-origin CamillaNode
+same-origin E-Stack DSP runtime
     ├── /ws/dsp
     ├── /ws/spectrum
     └── /api/*
@@ -55,10 +55,10 @@ The first migrated domain is Control. `pipeline.js` is deliberately generic:
 future Input Processing and Output Processing must reuse its modern/legacy
 CamillaDSP pipeline schema normalization rather than reimplement it.
 
-## Runtime reuse
+## Runtime ownership
 
-The product shares the CamillaNode origin, authentication boundary and runtime
-services. Existing server modules remain authoritative for Measurement Batch,
+The product owns the E-Stack DSP origin and standalone `estack-dsp.service` at
+`/home/bastos/e-stack-dsp`. Established server modules remain authoritative for Measurement Batch,
 Signal Generator, loudness and startup recall. See
 [runtime contracts](runtime-contracts.md) and [DSP safety](dsp-safety.md).
 
@@ -125,5 +125,5 @@ conditionally loaded module. Design System is retained only as developer referen
 
 New system APIs extend startupConfiguration rather than creating a second
 backend. workflowGate serializes system capture/apply and Signal/Measurement
-transitions, including recovery, within CamillaNode. See the safety and
+transitions, including recovery, within E-Stack DSP. See the safety and
 persistence contracts, ownership matrix and release audit for exact boundaries.

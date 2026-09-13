@@ -2,8 +2,8 @@
 
 This directory is the canonical entry point for developers and coding agents.
 The current product frontend starts at **`/estack-dsp/`**. It is a replacement
-frontend that reuses the established CamillaNode runtime; it is not a second
-DSP backend.
+frontend served by the standalone E-Stack DSP runtime. It retains the established
+CamillaNode-compatible APIs and transport; it is not a second DSP backend.
 
 ## Read in this order
 
@@ -34,10 +34,12 @@ DSP backend.
 
 ## Supporting documents
 
-- [Raspberry deployment](raspberry.md) — CamillaNode installation/update and
+- [Raspberry deployment](raspberry.md) — standalone E-Stack DSP installation/update and
   the boundary with the physical audio stack.
 - [Raspberry RC1 procedure](raspberry-rc1.md) — reversible CamillaNode-only
   deployment preparation; physical deployment and hardware acceptance pending.
+- [Standalone Raspberry runtime](standalone-runtime.md) — canonical
+  `/home/bastos/e-stack-dsp` service layout, one-time migration and rollback.
 - [Measurement Batch](measurement-batch.md) — batch format and its existing
   server-owned safety workflow.
 - [Product entry and migration status](estack-dsp-product.md) — launch modes

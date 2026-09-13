@@ -58,7 +58,7 @@ stop, timeout and restart recovery). Once acquired, the system operation checks
 both persistent temporary-session files. It refuses capture/apply if either
 exists, so it cannot capture temporary routing or invalidate a pending restore.
 Existing Signal-vs-Measurement checks remain unchanged and now share ordering.
-This gate covers operations in the CamillaNode server; Raspberry service restart
+This gate covers operations in the E-Stack DSP server; Raspberry service restart
 integration remains a separately accepted hardware boundary, unchanged here.
 
 Apply reads live configuration, sets -60 dB Master, validates saved references,

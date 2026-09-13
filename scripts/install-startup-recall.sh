@@ -2,14 +2,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NODE_BIN="$(command -v node || true)"
+NODE_BIN="/usr/bin/node"
 DSP_DROPIN_DIR="/etc/systemd/system/camilladsp.service.d"
 DSP_DROPIN_FILE="$DSP_DROPIN_DIR/estack-startup-recall.conf"
-NODE_DROPIN_DIR="/etc/systemd/system/camillanode.service.d"
+NODE_DROPIN_DIR="/etc/systemd/system/estack-dsp.service.d"
 NODE_DROPIN_FILE="$NODE_DROPIN_DIR/estack-after-dsp.conf"
 
-if [[ -z "$NODE_BIN" ]]; then
+if [[ ! -x "$NODE_BIN" ]]; then
   echo "Node.js is required but was not found." >&2
+  exit 1
+fi
+if [[ "$ROOT" != /home/bastos/e-stack-dsp ]]; then
+  echo "Canonical E-Stack DSP root is /home/bastos/e-stack-dsp." >&2
   exit 1
 fi
 
@@ -29,7 +33,7 @@ trap 'rm -f "$DSP_TMP" "$NODE_TMP"' EXIT
 
 cat > "$DSP_TMP" <<UNIT
 [Service]
-# Restore the CamillaNode-selected Startup system preset after every CamillaDSP
+# Restore the E-Stack DSP-selected Startup system preset after every CamillaDSP
 # process start/restart. The helper attenuates Main before swapping processing and
 # preserves live hardware devices and mixer routing.
 ExecStartPost=$NODE_BIN $ROOT/scripts/reapply-startup.js
@@ -39,10 +43,10 @@ sudo install -d -m 0755 "$DSP_DROPIN_DIR"
 sudo install -m 0644 "$DSP_TMP" "$DSP_DROPIN_FILE"
 
 # On Raspberry boot, let CamillaDSP finish its ExecStartPost recall before
-# CamillaNode starts. This prevents CamillaNode's legacy boot fallback from racing
+# E-Stack DSP starts. This prevents its boot fallback from racing
 # the canonical systemd recall path. A later CamillaDSP restart does not restart
-# CamillaNode; only the preset hook runs.
-if systemctl cat camillanode.service >/dev/null 2>&1; then
+# E-Stack DSP; only the preset hook runs.
+if systemctl cat estack-dsp.service >/dev/null 2>&1; then
   cat > "$NODE_TMP" <<UNIT
 [Unit]
 After=camilladsp.service
@@ -57,7 +61,7 @@ echo
 echo "Installed CamillaDSP startup recall drop-in:"
 echo "  $DSP_DROPIN_FILE"
 if [[ -f "$NODE_DROPIN_FILE" ]]; then
-  echo "Installed CamillaNode boot ordering drop-in:"
+  echo "Installed E-Stack DSP boot ordering drop-in:"
   echo "  $NODE_DROPIN_FILE"
 fi
 echo

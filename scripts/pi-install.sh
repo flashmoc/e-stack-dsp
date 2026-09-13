@@ -11,9 +11,12 @@ for cmd in node npm git; do
     fi
 done
 
-NODE_BIN="$(command -v node)"
+NODE_BIN="/usr/bin/node"
 RUN_USER="$(id -un)"
 RUN_GROUP="$(id -gn)"
+[[ "$ROOT_DIR" == /home/bastos/e-stack-dsp ]] || { echo 'ERROR: canonical install root is /home/bastos/e-stack-dsp.' >&2; exit 1; }
+[[ "$RUN_USER" == bastos && "$RUN_GROUP" == bastos ]] || { echo 'ERROR: canonical service user/group must be bastos.' >&2; exit 1; }
+[[ -x "$NODE_BIN" ]] || { echo 'ERROR: canonical service requires /usr/bin/node.' >&2; exit 1; }
 
 mkdir -p config
 if [[ ! -f camillaNodeConfig.json ]]; then
@@ -28,8 +31,8 @@ SERVICE_TMP="$(mktemp)"
 trap 'rm -f "$SERVICE_TMP"' EXIT
 cat > "$SERVICE_TMP" <<EOF
 [Unit]
-Description=E-Stack CamillaNode
-After=network-online.target
+Description=E-Stack DSP
+After=network-online.target camilladsp.service
 Wants=network-online.target
 
 [Service]
@@ -42,6 +45,7 @@ Environment=NODE_ENV=production
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
+PrivateTmp=false
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
@@ -49,9 +53,9 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 WantedBy=multi-user.target
 EOF
 
-sudo install -m 0644 "$SERVICE_TMP" /etc/systemd/system/camillanode.service
+sudo install -m 0644 "$SERVICE_TMP" /etc/systemd/system/estack-dsp.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now camillanode.service
+sudo systemctl enable --now estack-dsp.service
 
 PORT="$(node -e "const fs=require('fs');let p=8080;try{p=JSON.parse(fs.readFileSync('camillaNodeConfig.json','utf8')).port||p}catch(_){};process.stdout.write(String(p))")"
 for attempt in {1..12}; do
@@ -66,13 +70,13 @@ req.on('timeout', () => { req.destroy(); process.exit(1); });
 req.on('error', () => process.exit(1));
 NODE
     then
-        printf '\nCamillaNode installed and healthy on port %s.\n' "$PORT"
+        printf '\nE-Stack DSP installed and healthy on port %s.\n' "$PORT"
         echo "CamillaDSP, ALSA and DSP configuration were not modified."
         exit 0
     fi
     sleep 1
 done
 
-echo "ERROR: camillanode.service started but the HTTP health check failed." >&2
-sudo journalctl -u camillanode.service -n 60 --no-pager || true
+echo "ERROR: estack-dsp.service started but the HTTP health check failed." >&2
+sudo journalctl -u estack-dsp.service -n 60 --no-pager || true
 exit 1

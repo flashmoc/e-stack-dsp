@@ -31,7 +31,7 @@ function read(file) {
 }
 
 // Synchronous read/modify/atomic rename: no await window between collection
-// read and write in the single CamillaNode process.
+// read and write in the single E-Stack DSP process.
 function update(file, mutate) {
   const records = read(file);
   const result = mutate(records);

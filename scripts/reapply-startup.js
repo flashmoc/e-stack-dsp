@@ -1,7 +1,7 @@
 'use strict';
 
 // Invoked by camilladsp.service ExecStartPost.
-// Re-applies the CamillaNode Startup system preset after every CamillaDSP start
+// Re-applies the E-Stack DSP Startup system preset after every CamillaDSP start
 // or restart. The existing startupConfiguration.applyRecord() performs the safe
 // processing-only swap: master attenuation first, live hardware devices/mixers
 // preserved, then the preset master volume restored.

@@ -5,6 +5,7 @@ TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(realpath "${ESTACK_ROOT:-$TOOL_DIR/..}")"
 export ESTACK_ROOT="$ROOT_DIR"
 export GIT_OPTIONAL_LOCKS=0
+SERVICE_NAME="estack-dsp.service"
 RUNTIME_PATHS=(camillaNodeConfig.json currentConfig.json savedConfigs.dat startupConfig.json
     wiimLoudnessConfig.json wiimLoudnessStatus.json config
     setupFiles/spectrum_preview.yml setupFiles/spectrum_real.yml setupFiles/spectrum_white.yml
@@ -16,7 +17,7 @@ repo_check() {
 }
 service_info() {
     local unit
-    for unit in camillanode.service camilladsp.service camilladsp2.service estack-wiim-loudness.service \
+    for unit in "$SERVICE_NAME" camilladsp.service camilladsp2.service estack-wiim-loudness.service \
         $(systemctl list-unit-files --no-legend 2>/dev/null | awk 'tolower($1) ~ /spectrum.*\.service$/ {print $1}'); do
         echo "--- $unit ---"
         systemctl --no-pager --full status -- "$unit" 2>&1 || true
@@ -25,15 +26,29 @@ service_info() {
     done
 }
 runtime_copy() {
-    local dest="$1" item
+    runtime_copy_from "$ROOT_DIR" "$1"
+}
+runtime_copy_from() {
+    local source="$1" dest="$2" item
+    source="$(realpath "$source")"
     mkdir -p "$dest"
     for item in "${RUNTIME_PATHS[@]}"; do
-        if [[ -e "$ROOT_DIR/$item" || -L "$ROOT_DIR/$item" ]]; then
-            [[ -z "$(find "$ROOT_DIR/$item" -type l -print -quit)" ]] || die "Runtime symlink requires manual handling: $item"
+        if [[ -e "$source/$item" || -L "$source/$item" ]]; then
+            [[ -z "$(find "$source/$item" -type l -print -quit)" ]] || die "Runtime symlink requires manual handling: $item"
             mkdir -p "$dest/$(dirname "$item")"
-            cp -a "$ROOT_DIR/$item" "$dest/$item"
+            cp -a "$source/$item" "$dest/$item"
         fi
     done
+}
+runtime_replace_from() {
+    local source="$1" dest="$2" item
+    source="$(realpath "$source")"
+    dest="$(realpath "$dest")"
+    for item in "${RUNTIME_PATHS[@]}"; do
+        [[ ! -L "$dest/$(dirname "$item")" ]] || die "Runtime destination parent is a symlink: $item"
+        rm -rf -- "$dest/$item"
+    done
+    runtime_copy_from "$source" "$dest"
 }
 runtime_restore() {
     local source="$1" item
@@ -53,8 +68,8 @@ health_wait() {
         if node "$TOOL_DIR/pi-inspect.js" health; then return 0; fi
         sleep 1
     done
-    systemctl --no-pager --full status camillanode.service >&2 || true
-    journalctl -u camillanode.service -n 80 --no-pager >&2 || true
+    systemctl --no-pager --full status -- "$SERVICE_NAME" >&2 || true
+    journalctl -u "$SERVICE_NAME" -n 80 --no-pager >&2 || true
     return 1
 }
 deployment_lock() {

@@ -18,13 +18,13 @@ the historical generic Ubuntu 20.04 image.
 CamillaDSP main       127.0.0.1:1234  internal
 CamillaDSP spectrum   127.0.0.1:6413  internal
 CamillaGUI            0.0.0.0:5005    browser-facing
-CamillaNode           0.0.0.0:8080    browser-facing
+E-Stack DSP           0.0.0.0:8080    browser-facing
 
 Product: http://localhost:8080/estack-dsp/?transport=camillanode#control
 GUI:     http://localhost:5005/gui/index.html
 ```
 
-CamillaNode owns the browser-facing `/ws/dsp` and `/ws/spectrum` proxies.
+E-Stack DSP owns the browser-facing `/ws/dsp` and `/ws/spectrum` proxies.
 Ports `1234` and `6413` are not exposed to the host browser for product use.
 
 ## Local Windows workstation

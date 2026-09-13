@@ -1,5 +1,5 @@
 {
-  "name": "E-Stack CamillaNode",
+  "name": "E-Stack DSP",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "containerEnv": {
     "ESTACK_DEMO_CONTEXT": "1",
@@ -8,7 +8,7 @@
   "forwardPorts": [8080, 5005],
   "portsAttributes": {
     "8080": {
-      "label": "E-Stack CamillaNode",
+      "label": "E-Stack DSP",
       "onAutoForward": "openBrowser"
     },
     "5005": {

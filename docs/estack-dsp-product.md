@@ -5,8 +5,8 @@
 > second ownership model.
 
 `/estack-dsp/` is the product entry point for the new E-Stack DSP workspace.
-It is served by the existing CamillaNode Node process and therefore shares its
-origin, authentication boundary, HTTP port and CamillaDSP proxy.
+It is served by the standalone E-Stack DSP Node process and retains the accepted
+origin, authentication boundary, HTTP port and CamillaDSP proxy contracts.
 
 ## Connection contract
 
@@ -16,10 +16,10 @@ The product never opens a browser connection to CamillaDSP directly.
 E-Stack DSP browser
   ├─ same-origin HTTP → /api/*
   └─ same-origin WebSocket → /ws/dsp
-                              └─ CamillaNode → ws://127.0.0.1:1234
+                              └─ E-Stack DSP → ws://127.0.0.1:1234
 ```
 
-This is the exact path used by the existing CamillaNode E-Stack interface.
+This is the exact accepted compatibility path used by E-Stack DSP.
 `CAMILLADSP_PROXY_HOST` and `CAMILLADSP_PORT` remain the only runtime
 configuration for the main DSP endpoint. Spectrum remains on the existing
 `/ws/spectrum` → `CAMILLA_SPECTRUM_PORT` path.
@@ -27,7 +27,7 @@ configuration for the main DSP endpoint. Spectrum remains on the existing
 ## Modes
 
 Default product mode is local and makes no network request. To enable the
-same-origin CamillaNode transport, use:
+same-origin compatibility transport, use:
 
 ```text
 http://<camillanode-host>:<port>/estack-dsp/?transport=camillanode#connections

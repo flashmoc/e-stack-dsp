@@ -22,13 +22,13 @@ TOOL_DIR="$BACKUP/toolkit"
 failure() {
     echo 'DEPLOYMENT FAILED. Persistent backup retained; no automatic rollback.' >&2
     printf 'Rollback: ESTACK_ROOT=%q bash %q %q --yes\n' "$ROOT_DIR" "$TOOL_DIR/pi-rollback.sh" "$BACKUP" >&2
-    systemctl --no-pager --full status camillanode.service >&2 || true
-    journalctl -u camillanode.service -n 80 --no-pager >&2 || true
+    systemctl --no-pager --full status -- "$SERVICE_NAME" >&2 || true
+    journalctl -u "$SERVICE_NAME" -n 80 --no-pager >&2 || true
 }
 trap failure ERR
-# Close browser operators first. Stop only CamillaNode to freeze persistence and
+# Close browser operators first. Stop only E-Stack DSP to freeze persistence and
 # prevent new temporary workflows between the final check and code replacement.
-sudo systemctl stop camillanode.service
+sudo systemctl stop "$SERVICE_NAME"
 node "$TOOL_DIR/pi-inspect.js" offline-safety
 node "$TOOL_DIR/pi-inspect.js" unchanged "$BACKUP"
 ESTACK_ROOT="$ROOT_DIR" ESTACK_BRANCH="$ESTACK_BRANCH" ESTACK_FETCHED_SHA="$FETCHED" \
@@ -37,7 +37,7 @@ ESTACK_ROOT="$ROOT_DIR" ESTACK_BRANCH="$ESTACK_BRANCH" ESTACK_FETCHED_SHA="$FETC
 cd "$ROOT_DIR"
 npm ci --omit=dev --no-audit --no-fund
 npm run check
-sudo systemctl restart camillanode.service
+sudo systemctl restart "$SERVICE_NAME"
 health_wait
 bash "$TOOL_DIR/pi-postdeploy-check.sh"
 printf '\nPrevious SHA: %s\nDeployed SHA: %s\nBackup: %s\n' "$PREVIOUS" "$(git rev-parse HEAD)" "$BACKUP"

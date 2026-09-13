@@ -1,6 +1,6 @@
 # Runtime and API contracts
 
-E-Stack DSP migrations reuse these CamillaNode contracts. Do not rename,
+E-Stack DSP retains these CamillaNode-compatible contracts. Do not rename,
 replace or bypass them without an explicit architectural decision.
 
 ## Browser transport
@@ -9,7 +9,7 @@ replace or bypass them without an explicit architectural decision.
 | --- | --- | --- |
 | `/ws/dsp` | Main CamillaDSP command channel | `CAMILLADSP_PROXY_HOST` / `CAMILLADSP_PORT` (default `127.0.0.1:1234`) |
 | `/ws/spectrum` | Separate analyser command channel | `CAMILLA_SPECTRUM_PORT` (default `6413`) |
-| `/api/runtime` | Public runtime mode and port metadata | Existing CamillaNode server |
+| `/api/runtime` | Public runtime mode and port metadata | Standalone E-Stack DSP server |
 
 Browsers connect only to the same-origin paths. They never open a direct
 socket to CamillaDSP ports.

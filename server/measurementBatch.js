@@ -435,7 +435,7 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
             try {
                 await applyProcessing(current.baselineConfig, batch?.defaults?.settleMs || 0);
                 clearSession();
-                console.warn('Measurement Batch: restored normal DSP processing after CamillaNode restart.');
+                console.warn('Measurement Batch: restored normal DSP processing after E-Stack DSP restart.');
                 return true;
             } catch (error) {
                 console.error(`Measurement Batch recovery attempt ${attempt} failed:`, error.message);
