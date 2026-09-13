@@ -19,9 +19,9 @@ service_info() {
     for unit in camillanode.service camilladsp.service camilladsp2.service estack-wiim-loudness.service \
         $(systemctl list-unit-files --no-legend 2>/dev/null | awk 'tolower($1) ~ /spectrum.*\.service$/ {print $1}'); do
         echo "--- $unit ---"
-        systemctl --no-pager --full status "$unit" 2>&1 || true
-        systemctl --no-pager cat "$unit" 2>&1 || true
-        systemctl show "$unit" -p ExecStart -p FragmentPath -p DropInPaths 2>&1 || true
+        systemctl --no-pager --full status -- "$unit" 2>&1 || true
+        systemctl --no-pager cat -- "$unit" 2>&1 || true
+        systemctl --no-pager -p ExecStart -p FragmentPath -p DropInPaths show -- "$unit" 2>&1 || true
     done
 }
 runtime_copy() {

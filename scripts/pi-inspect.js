@@ -175,15 +175,15 @@ function serviceSafety() {
   const argv = /argv\[\]=([^;]+)/.exec(values.ExecStart)?.[1]?.trim();
   if (argv !== `${executable} ${ROOT}/index.js`) throw Error('Additional service arguments require manual audit');
   for (const unit of new Set(`${values.Requires || ''} ${values.Wants || ''} ${values.Requisite || ''}`.split(/\s+/).filter(Boolean))) {
-    if (run('systemctl', ['is-active', unit]) !== 'active') throw Error(`Inactive dependency ${unit}; restart could start another integration`);
+    if (run('systemctl', ['is-active', '--', unit]) !== 'active') throw Error(`Inactive dependency ${unit}; restart could start another integration`);
   }
   const version = run(executable, ['--version']);
   if (nodeStatus(version) === 'FAIL') throw Error(`Service Node ${version} is unsupported`);
   if (fs.realpathSync(executable) !== fs.realpathSync(process.execPath)) throw Error('Shell Node and systemd Node differ; use service Node in PATH');
-  if (run('systemctl', ['is-active', 'camilladsp.service']) !== 'active') throw Error('Main DSP service not active');
+  if (run('systemctl', ['is-active', '--', 'camilladsp.service']) !== 'active') throw Error('Main DSP service not active');
   // A running old bridge keeps old code in memory during checkout. Defer its
   // integration rather than stopping/restarting it as an implicit side effect.
-  try { if (run('systemctl', ['is-active', 'estack-wiim-loudness.service']) === 'active') throw Error('WiiM bridge active: separate maintenance acceptance required'); }
+  try { if (run('systemctl', ['is-active', '--', 'estack-wiim-loudness.service']) === 'active') throw Error('WiiM bridge active: separate maintenance acceptance required'); }
   catch (e) { if (!e.status) throw e; }
   console.error(`PASS: CamillaNode restart boundary; service Node ${version}`);
 }

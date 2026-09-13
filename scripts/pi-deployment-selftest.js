@@ -67,16 +67,27 @@ async function main() {
       const bin = path.join(temp, 'bin');
       fs.mkdirSync(bin);
       const unit = path.join(temp, 'unit.txt');
-      fs.writeFileSync(path.join(bin, 'systemctl'), '#!/bin/bash\ncase "$1:$2" in\nshow:camillanode.service) cat "$ESTACK_TEST_UNIT";;\nis-active:estack-wiim-loudness.service) exit 3;;\nis-active:*) echo active;;\n*) exit 1;;\nesac\n', { mode: 0o755 });
-      const normal = `LoadState=loaded\nWorkingDirectory=${temp}\nMainPID=0\nExecStart={ path=${process.execPath} ; argv[]=${process.execPath} ${temp}/index.js ; }\n`;
+      const systemctlTrace = path.join(temp, 'systemctl-trace.txt');
+      fs.writeFileSync(path.join(bin, 'systemctl'), [
+        '#!/bin/bash',
+        'case "$1:$2:$3" in',
+        'show:camillanode.service:*) cat "$ESTACK_TEST_UNIT";;',
+        'is-active:--:estack-wiim-loudness.service) exit 3;;',
+        'is-active:--:*) printf "%s:%s\\n" "$2" "$3" >> "$ESTACK_TEST_SYSTEMCTL_TRACE"; echo active;;',
+        '*) exit 1;;',
+        'esac',
+        ''
+      ].join('\n'), { mode: 0o755 });
+      const normal = `LoadState=loaded\nWorkingDirectory=${temp}\nMainPID=0\nExecStart={ path=${process.execPath} ; argv[]=${process.execPath} ${temp}/index.js ; }\nWants=-.mount\n`;
       function check(extra) {
         fs.writeFileSync(unit, normal + extra);
         return spawnSync(process.execPath, [path.join(__dirname, 'pi-inspect.js'), 'service-safety'], {
-          env: { ...process.env, ESTACK_ROOT: temp, ESTACK_TEST_UNIT: unit, PATH: `${bin}:${process.env.PATH}` }, encoding: 'utf8'
+          env: { ...process.env, ESTACK_ROOT: temp, ESTACK_TEST_UNIT: unit, ESTACK_TEST_SYSTEMCTL_TRACE: systemctlTrace, PATH: `${bin}:${process.env.PATH}` }, encoding: 'utf8'
         });
       }
       const pass = check('');
       assert.equal(pass.status, 0, pass.stderr);
+      assert(fs.readFileSync(systemctlTrace, 'utf8').split('\n').includes('--:-.mount'), 'dash-prefixed unit must follow --');
       for (const extra of ['ExecStartPost=/unsafe', 'ExecCondition=/unsafe', 'RequiredBy=other.service', 'PropagatesStopTo=camilladsp.service',
         'PrivateTmp=yes', 'EnvironmentFiles=/hidden', 'Environment=CAMILLADSP_PORT=9999', 'RootDirectory=/hidden', 'RuntimeDirectory=ephemeral']) {
         assert.notEqual(check(extra).status, 0, extra);
