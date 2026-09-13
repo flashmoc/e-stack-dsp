@@ -22,7 +22,7 @@ The normal updater's default remains `camilladsp-4.1-estack`.
 Older E-Stack checkouts tracked runtime files such as `camillaNodeConfig.json` and saved configs. They also do not yet contain the new safe updater. Bootstrap the first cleanup update directly from the current branch while explicitly pointing it at the existing checkout:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/flashmoc/camillaNode-EStack/camilladsp-4.1-estack/scripts/pi-update.sh \
+curl -fsSL https://raw.githubusercontent.com/flashmoc/e-stack-dsp/camilladsp-4.1-estack/scripts/pi-update.sh \
   | ESTACK_ROOT="$HOME/camillanode" bash
 ```
 
@@ -71,7 +71,7 @@ Clone the branch, then run:
 
 ```bash
 git clone --branch camilladsp-4.1-estack --single-branch \
-  https://github.com/flashmoc/camillaNode-EStack.git ~/camillanode
+  https://github.com/flashmoc/e-stack-dsp.git ~/camillanode
 cd ~/camillanode
 bash setup.sh
 ```

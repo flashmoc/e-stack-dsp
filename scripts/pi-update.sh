@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="${ESTACK_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${ESTACK_BRANCH:-camilladsp-4.1-estack}"
-REPO="${ESTACK_REPO:-https://github.com/flashmoc/camillaNode-EStack.git}"
+REPO="${ESTACK_REPO:-https://github.com/flashmoc/e-stack-dsp.git}"
 cd "$ROOT_DIR"
 
 if [[ ! -d .git ]]; then

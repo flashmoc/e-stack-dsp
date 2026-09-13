@@ -159,12 +159,17 @@ async function main() {
       assert.equal(command(['rev-parse', 'HEAD']), old);
     });
     await test('RC requires explicit branch; no implicit install/restart integrations', () => {
+      const previousCanonicalRepository = ['flashmoc', 'camillaNode-EStack'].join('/');
       const source = fs.readFileSync(path.join(ROOT, 'scripts/pi-deploy-rc.sh'), 'utf8');
       assert(source.includes('ESTACK_BRANCH:-'));
       assert(source.includes('ESTACK_EXPECTED_SHA'));
+      assert(source.includes('https://github.com/flashmoc/e-stack-dsp.git'));
+      assert(!source.includes(previousCanonicalRepository));
       assert(!/install-(startup|wiim)|restart camilladsp|reboot/.test(source));
       const stable = fs.readFileSync(path.join(ROOT, 'scripts/pi-update.sh'), 'utf8');
       assert(stable.includes('ESTACK_BRANCH:-camilladsp-4.1-estack'));
+      assert(stable.includes('https://github.com/flashmoc/e-stack-dsp.git'));
+      assert(!stable.includes(previousCanonicalRepository));
     });
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
   console.log(`Deployment selftests: ${passed} passed, 0 failed (fixtures only; no Raspberry/systemd deployment)`);

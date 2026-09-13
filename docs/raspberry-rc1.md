@@ -50,7 +50,7 @@ origin and does not rewrite it.
 ```bash
 cd ~/camillanode
 git remote get-url origin
-# Expected: https://github.com/flashmoc/camillaNode-EStack.git
+# Expected: https://github.com/flashmoc/e-stack-dsp.git
 REVIEWED_SHA='<full reviewed RC commit SHA>'
 git fetch origin refs/heads/release/raspi-rc1:refs/remotes/origin/release/raspi-rc1
 test "$(git rev-parse refs/remotes/origin/release/raspi-rc1)" = "$REVIEWED_SHA" || exit 1

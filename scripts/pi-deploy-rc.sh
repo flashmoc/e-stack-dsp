@@ -8,7 +8,7 @@ repo_check
 deployment_lock
 bash "$TOOL_DIR/pi-preflight.sh"
 REMOTE="$(git -C "$ROOT_DIR" remote get-url origin)"
-[[ "$REMOTE" == https://github.com/flashmoc/camillaNode-EStack.git ]] || die 'Unexpected origin; review it explicitly before RC deployment'
+[[ "$REMOTE" == https://github.com/flashmoc/e-stack-dsp.git ]] || die 'Unexpected origin; review it explicitly before RC deployment'
 PREVIOUS="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 git -C "$ROOT_DIR" fetch origin "refs/heads/$ESTACK_BRANCH:refs/remotes/origin/$ESTACK_BRANCH"
 FETCHED="$(git -C "$ROOT_DIR" rev-parse "refs/remotes/origin/$ESTACK_BRANCH^{commit}")"
