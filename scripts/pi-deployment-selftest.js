@@ -227,6 +227,34 @@ async function main() {
       assert(inspector.includes("mode === 'migration-service-safety'"));
       assert(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8').includes('"name": "e-stack-dsp"'));
     });
+    await test('Legacy migration accepts only the hardware-validated branch and exact SHA', () => {
+      const source = fs.readFileSync(path.join(ROOT, 'scripts/pi-migrate-standalone.sh'), 'utf8');
+      const lines = source.split('\n');
+      const base = lines.find(line => line.startsWith('HARDWARE_BASE='));
+      const guards = lines.filter(line => line.startsWith('[[ "$(git -C "$LEGACY_ROOT"') &&
+        (line.includes('rev-parse HEAD') || line.includes('branch --show-current')));
+      assert.equal(guards.length, 2, 'Both actual source identity guards must be exercised');
+      const fixture = path.join(temp, 'legacy-source-gate.sh');
+      fs.writeFileSync(fixture, [
+        '#!/bin/bash', 'set -euo pipefail', base,
+        'LEGACY_ROOT=/fixture', 'FIXTURE_BRANCH="$1"', 'FIXTURE_SHA="$2"',
+        'die() { echo "$*" >&2; exit 1; }',
+        'git() { case "$3 $4" in "rev-parse HEAD") printf "%s" "$FIXTURE_SHA";; "branch --show-current") printf "%s" "$FIXTURE_BRANCH";; *) exit 2;; esac; }',
+        ...guards, ''
+      ].join('\n'));
+      const acceptedSha = '16385076c553eaf4d5b26e90fc96f04969ee026f';
+      const check = (branch, sha) => spawnSync('bash', [fixture, branch, sha], { encoding: 'utf8' });
+      const accepted = check('release/raspi-rc1', acceptedSha);
+      assert.equal(accepted.status, 0, accepted.stderr);
+      for (const branch of ['main', 'feature/standalone-runtime', 'arbitrary', '']) {
+        const rejected = check(branch, acceptedSha);
+        assert.equal(rejected.status, 1);
+        assert.match(rejected.stderr, /must be on release\/raspi-rc1/);
+      }
+      const wrongSha = check('release/raspi-rc1', '0'.repeat(40));
+      assert.equal(wrongSha.status, 1);
+      assert.match(wrongSha.stderr, /not at the hardware-accepted base SHA/);
+    });
     await test('Standalone migration stages exact roots and has a dedicated retained-install rollback', () => {
       const migration = fs.readFileSync(path.join(ROOT, 'scripts/pi-migrate-standalone.sh'), 'utf8');
       const rollback = fs.readFileSync(path.join(ROOT, 'scripts/pi-migrate-standalone-rollback.sh'), 'utf8');
@@ -234,7 +262,7 @@ async function main() {
         'estack-dsp.service', 'camilladsp2.service', 'estack-wiim-loudness.service', 'scripts/reapply-startup.js',
         'setupFiles/spectrum_real.yml']) assert(migration.includes(value), `migration missing ${value}`);
       assert(migration.includes('runtime_replace_from "$LEGACY_ROOT" "$STAGE"'));
-      assert(migration.includes("branch --show-current)\" == main"));
+      assert(migration.includes("branch --show-current)\" == release/raspi-rc1"));
       assert(migration.includes('compare-runtime'));
       assert(migration.includes('compare-dsp-evidence'));
       assert(migration.includes('WorkingDirectory=/home/bastos/e-stack-dsp'));

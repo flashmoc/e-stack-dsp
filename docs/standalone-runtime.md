@@ -41,8 +41,10 @@ Install startup recall and WiiM only as separately accepted integrations.
 
 ## Migration from the hardware-accepted installation
 
-The one-time migration source is retained at `/home/bastos/camillanode`, SHA
-`16385076c553eaf4d5b26e90fc96f04969ee026f`. Prepare a reviewed commit on
+The one-time migration source is retained at `/home/bastos/camillanode`, on
+`release/raspi-rc1` at exactly SHA
+`16385076c553eaf4d5b26e90fc96f04969ee026f`. Both are required: `main`, other
+branches and any different SHA are rejected. Prepare a reviewed commit on
 `feature/standalone-runtime`, then extract the migration tools without changing
 the running checkout:
 

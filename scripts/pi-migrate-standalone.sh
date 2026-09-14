@@ -33,7 +33,7 @@ done
 [[ -x /usr/bin/node ]] || die '/usr/bin/node is required by the canonical service contract'
 [[ "$(/usr/bin/node -p 'parseInt(process.versions.node, 10)')" -ge 22 ]] || die 'Node 22+ required'
 [[ "$(git -C "$LEGACY_ROOT" rev-parse HEAD)" == "$HARDWARE_BASE" ]] || die 'Legacy checkout is not at the hardware-accepted base SHA'
-[[ "$(git -C "$LEGACY_ROOT" branch --show-current)" == main ]] || die 'Hardware-accepted migration source must be on main'
+[[ "$(git -C "$LEGACY_ROOT" branch --show-current)" == release/raspi-rc1 ]] || die 'Hardware-accepted migration source must be on release/raspi-rc1'
 node "$TOOL_DIR/pi-inspect.js" clean
 LEGACY_ORIGIN="$(git -C "$LEGACY_ROOT" remote get-url origin)"
 [[ "$LEGACY_ORIGIN" == "$REPOSITORY" || "$LEGACY_ORIGIN" == https://github.com/flashmoc/camillaNode-EStack.git ]] || die 'Legacy checkout origin is not recognized'
