@@ -193,7 +193,7 @@ function serviceSafety(options = {}) {
   console.error(`PASS: ${legacy ? 'legacy migration source' : 'E-Stack DSP'} restart boundary; service Node ${version}`);
 }
 
-function startupResolvable(root) {
+function startupResolvable(root, options = {}) {
   const state = read(path.join(root, 'startupConfig.json'), { mode: 'yaml' });
   if (state.mode === 'yaml') return { state, record: null };
   if (!['specific', 'last'].includes(state.mode)) throw Error(`Invalid startup mode ${state.mode}`);
@@ -204,9 +204,26 @@ function startupResolvable(root) {
   const record = records.find(item => item?.type === 'estack-system' &&
     ((id !== undefined && id !== null && String(item.id) === String(id)) || (name && item.name === name)));
   if (!record?.data?.processing) throw Error(`Startup ${state.mode} target is missing or invalid`);
-  let bootId = null;
-  try { bootId = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch (_) { /* non-Linux test */ }
+  let bootId = options.currentBootId || null;
+  if (!bootId) {
+    try { bootId = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch (_) { /* non-Linux test */ }
+  }
   if (!bootId || state.lastBootIdApplied !== bootId) throw Error('Startup preset is resolvable but not recorded as applied for this boot; migration would risk a DSP recall');
+  const hasValue = value => value !== undefined && value !== null && String(value).length > 0;
+  const targetId = record.id;
+  const appliedId = state.lastBootAppliedId;
+  const targetName = record.name;
+  const appliedName = state.lastBootAppliedName;
+  if (hasValue(targetId)) {
+    if (!hasValue(appliedId) || String(appliedId) !== String(targetId)) {
+      throw Error('Startup target differs from the preset recorded as applied for this boot');
+    }
+  } else if (!hasValue(targetName) || !hasValue(appliedName) || appliedName !== targetName) {
+    throw Error('Startup target cannot be matched to the preset recorded as applied for this boot');
+  }
+  if (hasValue(targetName) && hasValue(appliedName) && appliedName !== targetName) {
+    throw Error('Startup target name differs from the preset recorded as applied for this boot');
+  }
   return { state, record };
 }
 function inventory(base) {

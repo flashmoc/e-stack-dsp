@@ -44,20 +44,35 @@ async function main() {
       fs.writeFileSync(file, JSON.stringify({ mode: 'yaml' }));
       assert.equal(inspect.startup(file).mode, 'yaml');
     });
-    await test('Standalone startup target must exist and be recorded for the current boot', () => {
+    await test('Standalone startup target must be the preset applied during the current boot', () => {
       const root = path.join(temp, 'startup-resolvable');
       fs.mkdirSync(root);
-      let bootId = '';
-      try { bootId = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch (_) {}
+      const bootId = 'fixture-current-boot';
+      const presetId = 1788196125761;
       fs.writeFileSync(path.join(root, 'savedConfigs.dat'), JSON.stringify([
-        { id: 'home', name: 'HOME', type: 'estack-system', data: { processing: { pipeline: [] } } }
+        { id: presetId, name: 'HOME', type: 'estack-system', data: { processing: { pipeline: [] } } }
       ]));
-      fs.writeFileSync(path.join(root, 'startupConfig.json'), JSON.stringify({ mode: 'specific', configId: 'home', lastBootIdApplied: bootId }));
-      if (bootId) assert.equal(inspect.startupResolvable(root).record.name, 'HOME');
-      fs.writeFileSync(path.join(root, 'startupConfig.json'), JSON.stringify({ mode: 'specific', configId: 'missing', lastBootIdApplied: bootId }));
-      assert.throws(() => inspect.startupResolvable(root));
-      fs.writeFileSync(path.join(root, 'startupConfig.json'), JSON.stringify({ mode: 'specific', configId: 'home', lastBootIdApplied: 'another-boot' }));
-      assert.throws(() => inspect.startupResolvable(root));
+      const target = mode => mode === 'specific'
+        ? { mode, configId: presetId, configName: 'HOME' }
+        : { mode, lastUsedId: presetId, lastUsedName: 'HOME' };
+      const writeState = state => fs.writeFileSync(path.join(root, 'startupConfig.json'), JSON.stringify(state));
+      for (const mode of ['specific', 'last']) {
+        const matching = { ...target(mode), lastBootIdApplied: bootId, lastBootAppliedId: String(presetId), lastBootAppliedName: 'HOME' };
+        writeState(matching);
+        assert.equal(inspect.startupResolvable(root, { currentBootId: bootId }).record.name, 'HOME');
+
+        writeState({ ...matching, lastBootAppliedId: 'different-id' });
+        assert.throws(() => inspect.startupResolvable(root, { currentBootId: bootId }), /differs from the preset recorded as applied/);
+
+        writeState({ ...matching, lastBootAppliedName: 'DIFFERENT' });
+        assert.throws(() => inspect.startupResolvable(root, { currentBootId: bootId }), /target name differs/);
+
+        writeState({ ...matching, lastBootIdApplied: 'another-boot' });
+        assert.throws(() => inspect.startupResolvable(root, { currentBootId: bootId }), /not recorded as applied for this boot/);
+      }
+      writeState({ mode: 'specific', configId: 'missing', lastBootIdApplied: bootId,
+        lastBootAppliedId: presetId, lastBootAppliedName: 'HOME' });
+      assert.throws(() => inspect.startupResolvable(root, { currentBootId: bootId }), /target is missing or invalid/);
     });
     await test('Any pending snapshot/session refuses preflight without deleting it', () => {
       const snapshot = path.join(temp, 'snapshot.json');

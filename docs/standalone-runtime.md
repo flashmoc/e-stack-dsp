@@ -69,10 +69,12 @@ service topology, unresolved startup state, temporary Signal/Measurement state,
 SignalGenerator capture or invalid DSP topology. All preflight interactions are
 read-only (`GetState`, `GetConfigJson`, `GetVolume` and GET status APIs).
 
-For the verified `specific` startup mode, the target preset must exist and the
-persisted `lastBootIdApplied` must equal the current Linux boot ID. This preserves
+For a configured `specific` or `last` startup mode, the target preset must exist
+and the persisted `lastBootIdApplied` must equal the current Linux boot ID. This preserves
 startup semantics while preventing the new service start from unexpectedly
-reapplying processing during migration.
+reapplying processing during migration. The resolved `specific` or `last` target
+must also match `lastBootAppliedId`; when both names are present,
+`lastBootAppliedName` must match as well.
 
 Before staging, a persistent backup outside both repositories records runtime
 bytes/modes/hashes, old Git bundle/status, direct DSP evidence, listening ports,
