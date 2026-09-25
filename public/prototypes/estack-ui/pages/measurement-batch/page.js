@@ -95,7 +95,7 @@
 
   function renderHeader() {
     const batch = state?.batch;
-    $('transportState').textContent = apiMode ? (online ? 'CAMILLANODE API' : 'API UNAVAILABLE') : 'LOCAL MODEL';
+    $('transportState').textContent = apiMode ? (online ? 'LIVE' : 'OFFLINE') : 'LOCAL MODEL';
     $('transportState').className = `ui-status ${apiMode ? 'is-warning' : 'is-pending'}`;
     $('measurementState').textContent = state?.phase === 'active' ? 'CAPTURED' : state?.phase === 'complete' ? 'RESTORED' : batch ? 'READY' : 'NO BATCH';
     $('measurementState').className = `ui-badge ${state?.active ? 'is-success' : batch ? 'is-pending' : 'is-muted'}`;
@@ -109,7 +109,7 @@
     const total = progress.total || 0;
     const completed = state?.active ? progress.currentNumber || 1 : progress.completedCount || 0;
     $('progressLabel').textContent = `${completed} / ${total}`;
-    $('progressText').textContent = state?.message || 'Waiting for a campaign';
+    $('progressText').textContent = state?.active ? 'Measure in REW, then continue' : state?.phase === 'complete' ? 'Complete · system restored' : batch ? 'Ready to start' : 'Import a campaign to begin';
     $('progressBar').style.width = `${total ? Math.min(100, completed / total * 100) : 0}%`;
   }
 
@@ -137,7 +137,7 @@
     const signature=JSON.stringify([step,state?.active]);if(signature===currentSignature)return;currentSignature=signature;
     $('currentCounter').textContent = step ? `${state?.active ? 'MEASUREMENT' : 'PREVIEW'} ${step.number} / ${step.total}` : '—';
     $('currentName').textContent = step?.name || 'No active measurement';
-    $('currentInstruction').textContent = step?.instruction || 'Start a campaign to capture the live DSP baseline and prepare the first measurement.';
+    $('currentInstruction').textContent = step?.instruction || (step ? 'Run the sweep in REW, save the measurement, then continue.' : 'Import a campaign, then start the first measurement.');
     $('currentPosition').textContent = step?.position || ''; $('currentPosition').hidden = !step?.position;
     $('activeWays').innerHTML = step ? step.activeWayLabels.map(way => `<span>${escape(way)}</span>`).join('') : '<p class="empty-state">—</p>';
     $('dspDelta').innerHTML = deltaRows(step);

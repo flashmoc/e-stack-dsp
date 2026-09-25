@@ -1,5 +1,9 @@
 # Control
 
+Master now exposes native DSP mute (GetMute/SetMute with readback), independent
+of Level Lock and without changing volume or way gains. Muted ways show no
+limiter event. Missing/silent peak margins are not compared as numeric zero.
+
 ## Status
 
 **Software parity accepted at `d1c803e`; real Raspberry acceptance pending

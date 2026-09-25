@@ -124,6 +124,7 @@ const startupConfiguration = require('./server/startupConfiguration')(app, {
     savedConfigsFile: SAVED_CONFIGS_FILE,
     demo: DEMO_MODE
 });
+require('./server/advanced')(app, startupConfiguration);
 
 // Codespaces only: keep CamillaGUI on the E-Stack DSP origin. Raspberry installs
 // use CamillaGUI directly and never enter this proxy path.

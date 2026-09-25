@@ -72,10 +72,11 @@
       });
     $("noMatches").hidden = matches > 0;
   }
-  function render(config) {
+  function render(config, revision) {
     const next = JSON.stringify(config);
     if (next === signature) return;
     signature = next;
+    window.EStackAdvancedEditor.receive(config, revision);
     const expanded = new Set(
       [...document.querySelectorAll("details[open][data-key]")].map(
         (node) => node.dataset.key,
@@ -170,11 +171,12 @@
     filter();
   }
   async function refresh() {
-    if (pending || stopped) return;
+    if (pending || stopped || window.EStackAdvancedEditor.holding()) return;
     pending = true;
     $("refresh").disabled = true;
     try {
-      render(await B.command("GetConfigJson"));
+      const snapshot = await B.api('/api/advanced');
+      render(snapshot.config, snapshot.revision);
       $("state").textContent = `Live · ${new Date().toLocaleTimeString()}`;
       note("");
     } catch (error) {

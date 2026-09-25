@@ -39,6 +39,11 @@ function create(config, stored) {
   assert.deepStrictEqual(applied.devices, beforeApply.devices); assert.deepStrictEqual(applied.mixers, beforeApply.mixers); assert.deepStrictEqual(applied.processors, beforeApply.processors); assert.deepStrictEqual(applied.filters.sub_delay, beforeApply.filters.sub_delay);
   const saved = await store.save({ type: 'global-eq', name: 'New EQ', createdDate: '2021-01-01T00:00:00.000Z', data: { format: 'estack-global-eq-v1', bands: importer.serializeBands(imported) } });
   assert.ok(saved.id); assert.deepStrictEqual(getStored().find(record => record.id === 'system-a'), initialRecords[0]); assert.deepStrictEqual(getStored().find(record => record.id === 'other-c'), initialRecords[2]);
+  const renamed = await store.rename(saved.id, 'Renamed EQ');
+  assert.equal(renamed.id, saved.id); assert.deepStrictEqual(renamed.data, saved.data);
+  assert.deepStrictEqual(getStored().find(record => record.id === 'system-a'), initialRecords[0]);
+  await assert.rejects(() => store.rename(saved.id, 'B'), /already exists/);
+  await assert.rejects(() => store.rename('system-a', 'System rename'), /System Preset service/);
   const overwritten = await store.save({ type: 'global-eq', name: 'B', createdDate: '2022-01-01T00:00:00.000Z', data: { format: 'estack-global-eq-v1', bands: [] } }, true); assert.strictEqual(overwritten.id, 'eq-b');
   await store.delete(saved.id); assert.strictEqual(getStored().some(record => record.id === saved.id), false); assert.deepStrictEqual(getStored().find(record => record.id === 'system-a'), initialRecords[0]); assert.deepStrictEqual(getStored().find(record => record.id === 'other-c'), initialRecords[2]);
   console.log('OK:   Input Processing import, atomic apply and complete saved-config preservation');

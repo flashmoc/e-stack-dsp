@@ -68,3 +68,21 @@ is verified before active/last-used metadata is written. Failure attempts to
 retain -60 dB and reports an error, rather than claiming the requested preset active.
 Captured Master is restricted to finite -100..0 dB; old missing/null values use
 the existing -40 dB fallback instead of accidental 0 dB.
+
+## Advanced edits and paired output protection
+
+Both are server-owned typed operations, serialized through the same workflow
+gate. Active Signal/Measurement snapshots and SignalGenerator capture are
+rejected. Advanced requires the exact current configuration revision. Operations
+clone live state, preserve devices, validate references, attenuate to the lower
+of current Master and −60 dB, upload once, verify the entire readback, then restore
+and verify Master. Failure after attenuation holds that safe value and reports
+it; the UI never silently restores volume after an unverified graph write.
+
+Output protection requires a unique per-way Limiter and independent active
+Compressor. Only clip_limit and threshold change; threshold is always clip_limit
+minus 1 dB. Ambiguous/shared/missing protection is refused. Attack, release,
+ratio, routing and other ways remain unchanged.
+
+Master mute uses native GetMute/SetMute and verifies the result. It never emulates
+mute by changing volume or rewriting way gains.

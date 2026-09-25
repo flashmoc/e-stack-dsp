@@ -60,7 +60,7 @@ System capture/update/delete is server-owned and synchronously reads, changes
 one record and atomically renames the complete collection. Mixed record types
 remain untouched. The file writer uses a unique temporary filename, fsync and
 existing permissions. A failed write cannot truncate the original collection.
-System IDs and creation dates survive overwrite; rename is not exposed.
+System IDs and creation dates survive overwrite and rename.
 Active, selected-startup and last-used records cannot be deleted.
 
 startupConfig.json uses the same atomic writer. Startup selection, system apply
@@ -72,3 +72,9 @@ The earlier desktop legacy whole-collection save contract now requires ETag /
 If-Match or a matching base array, and cannot modify system records. The product
 saved-config client supplies the base automatically; Global EQ data semantics,
 identity, overwrite rules and unrelated-record preservation are unchanged.
+
+System renaming uses the server workflow gate and atomic file writes. Matching
+startup/active/last-used/boot-applied references retain their ID and get the new
+name. A metadata write failure rolls the collection back. Global EQ renaming uses
+the existing compare-and-swap client and changes only the selected record name.
+Neither operation applies processing or changes the configured startup mode.

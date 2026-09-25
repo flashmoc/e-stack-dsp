@@ -6,6 +6,43 @@
   list-style: none;
   counter-reset: stage;
 }
+.advanced-tabs { display:flex; gap:8px; border-bottom:1px solid #294348; padding-bottom:16px; flex-wrap:wrap; }
+.advanced-tabs [aria-pressed="true"] { background:#244d54; border-color:#55d8e7; color:#9aeeff; }
+.advanced-selection { display:flex; align-items:end; gap:24px; margin:22px 0; }
+.advanced-selection label { width:min(100%,480px); }
+.advanced-selection select { width:100%; }
+#editor > label { display:inline-flex; flex-direction:column; gap:8px; margin:0 20px 20px 0; min-width:220px; }
+.parameter-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,240px)); gap:20px; }
+.parameter-grid label,.mixer-source label { display:flex; flex-direction:column; gap:8px; text-transform:capitalize; }
+.parameter-grid input,.parameter-grid select { width:100%; min-width:0; }
+.parameter-grid input[type="checkbox"],.mixer-source input[type="checkbox"] { width:24px; height:24px; margin:10px; }
+.editor-actions { display:flex; align-items:center; gap:12px; padding-top:24px; margin-top:24px; border-top:1px solid #294348; }
+.editor-actions output { margin-right:auto; color:#aac0c3; }
+.remove-filter { margin-top:24px; }
+.mixer-source { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) auto; align-items:end; gap:16px; padding:14px 0; }
+.mixer-source input { min-width:0; width:100%; }
+.mixer-destination { padding:16px 0; }
+.pipeline-stage { padding:16px 0; border-bottom:1px solid #294348; }
+.stage-filters { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.inspector > summary { font-weight:600; color:#aac0c3; }
+[hidden] { display:none !important; }
+@media(max-width:700px) {
+  .surface-heading { display:flex; align-items:center; gap:12px; }
+  .surface-heading .surface-actions { display:flex; flex-direction:column; align-items:end; gap:4px; }
+  .surface-heading .surface-actions button { min-width:100px; }
+  .surface-heading .eyebrow { display:none; }
+  .advanced-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
+  .advanced-tabs button { padding:10px 3px; font-size:12px; }
+  .advanced-selection { display:block; }
+  .advanced-selection span { display:block; margin-top:10px; }
+  .parameter-grid { grid-template-columns:1fr 1fr; gap:18px 12px; }
+  #editor > label { display:flex; margin-right:0; min-width:0; }
+  .editor-actions { flex-wrap:wrap; position:sticky; bottom:0; background:#102226; padding:12px 0; }
+  .editor-actions output { width:100%; }
+  .editor-actions button { flex:1; }
+  .mixer-source { grid-template-columns:1fr 1fr; }
+  .mixer-source > button { grid-column:1/-1; }
+}
 .pipeline-list > li {
   counter-increment: stage;
   display: grid;

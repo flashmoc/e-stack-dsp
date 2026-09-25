@@ -79,7 +79,7 @@ capability belongs in the product page plus a reusable domain/service layer.
 - **Connections:** read-only live runtime/DSP/spectrum diagnostics.
 - **Preferences:** browser-local density and contrast consumed by the secondary workflow pages, System Presets and Advanced.
 - **System Presets/Startup:** server-owned capture, verified apply, protected deletion and boot selection.
-- **Advanced:** read-only live topology/ownership inspector.
+- **Advanced:** structured expert controls backed by a revision-checked server transaction; secondary topology/ownership inspector.
 - **Legacy frontend:** retained as behavioral reference until each capability
   has a product-owned replacement.
 

@@ -65,7 +65,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
   ];
   store.atomicWrite(saved, unrelated);
   const app = express();
-  require("../server/startupConfiguration")(app, {
+  const system = require("../server/startupConfiguration")(app, {
     root,
     stateFile,
     savedConfigsFile: saved,
@@ -74,6 +74,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
     WebSocket: Socket,
     demo: true,
   });
+  require('../server/advanced')(app, system);
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   const base = "http://127.0.0.1:" + server.address().port;
@@ -92,6 +93,28 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
   }
   try {
     const original = clone(config);
+    const advanced = await api('/api/advanced');
+    const advancedChange = { revision: advanced.body.revision, operation: { kind: 'filter', name: 'gain', value: { type: 'Gain', parameters: { gain: -4 } } } };
+    commands.length = 0;
+    assert((await api('/api/advanced/edit', advancedChange)).ok);
+    assert.equal(config.filters.gain.parameters.gain, -4);
+    assert.deepEqual(config.devices, original.devices);
+    assert.deepEqual(config.mixers, original.mixers);
+    assert.equal(volume, -18);
+    assert.deepEqual(commands.filter(c => typeof c === 'object').map(c => Object.keys(c)[0]), ['SetVolume', 'SetConfigJson', 'SetVolume']);
+    const calls = commands.length;
+    assert.equal((await api('/api/advanced/edit', advancedChange)).ok, false, 'stale edits must fail');
+    assert(!commands.slice(calls).some(c => typeof c === 'object'), 'stale edits must not write');
+    for (const file of [signal, batch]) {
+      store.atomicWrite(file, {});
+      assert.equal((await api('/api/advanced/edit', { ...advancedChange, revision: (await api('/api/advanced')).body.revision })).ok, false);
+      fs.unlinkSync(file);
+    }
+    const currentRevision = (await api('/api/advanced')).body.revision;
+    corrupt = true;
+    assert.equal((await api('/api/advanced/edit', { ...advancedChange, revision: currentRevision })).ok, false);
+    assert.equal(volume, -60, 'failed Advanced readback must hold safe Master');
+    corrupt = false; config = clone(original); volume = -18;
     const capture = await api("/api/system-presets/capture", {
       name: "Reference",
     });
@@ -137,6 +160,18 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
       assert.equal((await api("/api/startup-config")).body.mode, mode);
     }
     assert.equal((await api("/api/system-presets/delete", { id })).ok, false);
+    const renameState = JSON.parse(fs.readFileSync(stateFile));
+    Object.assign(renameState, { configId: id, configName: 'Reference', lastBootAppliedId: id, lastBootAppliedName: 'Reference' });
+    store.atomicWrite(stateFile, renameState);
+    const beforeRename = clone(config), callsBeforeRename = commands.length;
+    assert((await api('/api/system-presets/rename', { id, name: 'Renamed reference' })).ok);
+    const renamedState = JSON.parse(fs.readFileSync(stateFile));
+    for (const key of ['activeName', 'configName', 'lastUsedName', 'lastBootAppliedName']) assert.equal(renamedState[key], 'Renamed reference');
+    assert.deepEqual(store.read(saved).slice(0, 2), unrelated);
+    assert.deepEqual(store.read(saved).find(r => r.id === id).data, record.data);
+    assert.deepEqual(config, beforeRename);
+    assert.equal(commands.length, callsBeforeRename, 'Rename must not contact DSP');
+    assert((await api('/api/system-presets/rename', { id, name: 'Reference' })).ok);
     for (const file of [signal, batch]) {
       store.atomicWrite(file, {});
       assert.equal((await api("/api/system-presets/apply", { id })).ok, false);

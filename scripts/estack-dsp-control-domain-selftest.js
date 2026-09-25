@@ -44,11 +44,14 @@ function currentTopology() {
 }
 
 function createDomain(config) {
+  let muted = false;
   const local = new Map();
   const bridge = { async command(payload) {
     const name = typeof payload === 'string' ? payload : Object.keys(payload)[0];
     if (name === 'GetConfigJson') return clone(config);
     if (name === 'GetVolume') return -12;
+    if (name === 'GetMute') return muted;
+    if (name === 'SetMute') { muted = payload.SetMute; return true; }
     if (name === 'SetVolume') return payload.SetVolume;
     if (name === 'SetConfigJson') { config = JSON.parse(payload.SetConfigJson); return true; }
     if (name === 'GetCaptureSignalPeak') return [-100, -100];
@@ -64,6 +67,13 @@ function createDomain(config) {
 (async () => {
   const { P, M, service, getConfig } = createDomain(currentTopology());
   const base = getConfig();
+  await service.refresh();
+  await service.setMasterMute(true);
+  assert.equal(service.snapshot().masterMuted, true);
+  assert.equal(service.snapshot().master, -12);
+  assert.deepStrictEqual(getConfig(), base, 'Master mute must not rewrite any way gain or graph');
+  await service.setMasterMute(false);
+  assert.equal(service.snapshot().masterMuted, false);
   assert.deepStrictEqual(Array.from(P.channelsForStep(base.pipeline[0])), [0, 1], 'modern channels schema is not normalized');
   assert.strictEqual(P.firstMixerContext(base).index, 1, 'first mixer context is wrong');
   assert.deepStrictEqual(Array.from(M.activeOutputs(base)), [0, 1, 2, 3, 4, 5], 'unused playback outputs 6/7 were treated as E-Stack ways');

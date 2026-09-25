@@ -89,6 +89,7 @@
           ["apply", "Apply"],
           ["boot", "Use at boot"],
           ["update", "Update from live"],
+          ["rename", "Rename"],
           ["delete", "Delete"],
         ]) {
           const button = document.createElement("button");
@@ -175,6 +176,11 @@
     }
   }
   function act(action, preset) {
+    if (action === "rename") {
+      const name = prompt("New preset name", preset.name)?.trim();
+      if (name && name !== preset.name) run(() => post("/api/system-presets/rename", { id: preset.id, name }), "Preset renamed");
+      return;
+    }
     if (action === "boot") {
       bootDraft = true;
       $("bootMode").value = "specific";

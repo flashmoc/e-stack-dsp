@@ -44,6 +44,12 @@ function demoTopology() {
 function create(config) {
   const context = { window: {}, console, JSON, Math, Set, Object, Array, Number, String, Promise };
   context.window.EStackDSPBridge = { mode: 'camillanode', async command(payload) { const name = typeof payload === 'string' ? payload : Object.keys(payload)[0]; if (name === 'GetConfigJson') return clone(config); if (name === 'SetConfigJson') { config = JSON.parse(payload.SetConfigJson); return true; } throw new Error(`Unexpected ${name}`); } };
+  context.window.EStackDSPBridge.api = async (url, options) => {
+    assert.equal(url, '/api/output-protection');
+    const { channel, clip } = JSON.parse(options.body);
+    config = require('../server/advancedModel').apply(clone(config), { kind: 'protection', channel, clip });
+    return { config: clone(config) };
+  };
   files.forEach(file => vm.runInNewContext(fs.readFileSync(path.join(root, 'public/prototypes/estack-ui/shared/domain', file), 'utf8'), context, { filename: file }));
   return { model: context.window.EStackOutputProcessingModel, service: context.window.EStackOutputProcessingService, get: () => clone(config) };
 }
@@ -90,6 +96,15 @@ function create(config) {
 
   before = get(); const originalLimiter = clone(before.filters.sub_hard_limit); await service.setHardLimiter(0, -4); changed = get(); assert.strictEqual(changed.filters.sub_hard_limit.parameters.clip_limit, -4); const unchangedLimiter = clone(changed.filters.sub_hard_limit); delete originalLimiter.parameters.clip_limit; delete unchangedLimiter.parameters.clip_limit; assert.deepStrictEqual(unchangedLimiter, originalLimiter);
   const illegalWay = clone(before); illegalWay.filters.kick_delay.parameters.delay = 9; assert.throws(() => model.assertDelayMutation(before, illegalWay, 0), /unexpectedly/);
+  assert.strictEqual(changed.processors.sub_protection.parameters.threshold, -5);
+  const unpaired = clone(changed); unpaired.processors.sub_protection.parameters.threshold = -4;
+  assert.throws(() => model.assertLimiterMutation(before, unpaired, 0), /exactly 1 dB/);
+  const unrelatedProtection = clone(changed); unrelatedProtection.processors.kick_protection.parameters.threshold = -5;
+  assert.throws(() => model.assertLimiterMutation(before, unrelatedProtection, 0), /unexpectedly/);
+  const sharedProtection = clone(before); sharedProtection.processors.sub_protection.parameters.process_channels = [0, 1];
+  await assert.rejects(() => create(sharedProtection).service.setHardLimiter(0, -10), /independent/);
+  const missingProtection = clone(before); delete missingProtection.processors.sub_protection;
+  await assert.rejects(() => create(missingProtection).service.setHardLimiter(0, -10), /independent/);
   const illegalInput = clone(before); illegalInput.filters.GLOBAL_EQ_01.parameters.gain = 7; assert.throws(() => model.assertDelayMutation(before, illegalInput, 0), /unexpectedly/);
   const illegalMixer = clone(before); illegalMixer.mixers.routing.mapping[0].sources[0].gain = 1; assert.throws(() => model.assertDelayMutation(before, illegalMixer, 0), /unexpectedly/);
   console.log('OK:   Output Processing six-way topology, scoped transactions, PEQ, phase and shared crossover guards');

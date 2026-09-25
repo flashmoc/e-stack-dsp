@@ -1,6 +1,22 @@
 [hidden] {
   display: none !important;
 }
+.calibration-details summary,.baseline-panel > summary { min-height:48px; padding:14px; cursor:pointer; color:var(--color-text-secondary); }
+.calibration-details .delta-list { padding:12px 0; }
+.measurement-page .current-body { display:flex; flex-direction:column; }
+.measurement-page .calibration-details { order:5; border-top:1px solid var(--color-border); }
+.measurement-page #currentName { margin-top:8px; }
+.measurement-page #next { min-width:180px; }
+.measurement-page #abort { margin-left:auto; }
+.measurement-page .rew-grid > div { background:none; }
+.measurement-page .measurement-footer { color:var(--color-text-secondary); }
+@media(max-width:700px) {
+  .measurement-page .current-actions { display:grid; grid-template-columns:1fr 1fr; }
+  .measurement-page #next { grid-column:1/-1; grid-row:1; min-height:50px; }
+  .measurement-page #abort { grid-column:1/-1; margin:8px 0 0; }
+  .measurement-page .batch-actions { display:flex; flex-wrap:wrap; }
+  .measurement-page .batch-actions button { flex:1 1 auto; }
+}
 .measurement-page {
   max-width: 1600px;
   margin: auto;

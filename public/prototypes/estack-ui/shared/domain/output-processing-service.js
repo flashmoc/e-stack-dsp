@@ -29,7 +29,12 @@
     return transact(next => { const entry = M.entryForType(next, channel, 'Delay'); entry.filter.parameters.delay = M.round(M.clamp(value, 0, 100), 2); }, (before, after) => M.assertDelayMutation(before, after, channel));
   }
   async function setHardLimiter(channel, value) {
-    return transact(next => { const entry = M.limiterEntry(next, channel); entry.filter.parameters.clip_limit = M.round(M.clamp(value, -60, 0), 1); }, (before, after) => M.assertLimiterMutation(before, after, channel));
+    if (!Number.isFinite(Number(value))) throw new Error('Enter a finite hard limiter threshold.');
+    const clip = M.round(M.clamp(value, -60, 0), 1);
+    const result = await window.EStackDSPBridge.api('/api/output-protection', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel: Number(channel), clip })
+    });
+    latest = result.config; M.discover(latest); emit(); return snapshot();
   }
   function crossoverType(family, edge) {
     const selected = family === 'Butterworth' ? 'Butterworth' : 'LinkwitzRiley'; return `${selected}${edge === 'hpf' ? 'Highpass' : 'Lowpass'}`;

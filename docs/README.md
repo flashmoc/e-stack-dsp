@@ -56,7 +56,7 @@ must follow the canonical documents above.
 ## Software release gate
 
 - [System Presets and Startup](pages/system-presets.md) — server-owned capture, recall and boot selection.
-- [Advanced](pages/advanced.md) — live read-only topology and ownership inspector.
+- [Advanced](pages/advanced.md) — expert processing controls and secondary live inspector.
 - [Operational ownership matrix](operational-ownership.md).
 - [Complete live/mock audit](live-mock-audit.md).
 - [Software release audit](software-release-audit.md).

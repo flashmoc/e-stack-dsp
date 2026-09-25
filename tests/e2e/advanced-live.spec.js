@@ -28,6 +28,7 @@ test("Advanced inspects actual topology without DSP writes at phone width", asyn
   for (const kind of ["mixers", "filters", "processors"])
     for (const name of Object.keys(config[kind] || {}))
       await expect(f.locator("#definitions")).toContainText(name);
+  await f.locator(".inspector > summary").click();
   await f.locator("#pipeline summary").first().click();
   await f.locator("#refresh").click();
   await expect(f.locator("#pipeline details").first()).toHaveAttribute(

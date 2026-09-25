@@ -52,5 +52,7 @@ category C (fake state reachable as live truth) remains.
 The release shell E2E traverses every page on desktop and phone, asserts no
 EStackPrototypeDSP global, no fixture/mock/preview-shell request and no visible
 mock/prototype language. Existing live health tests verify continuous telemetry
-and offline clearing. The read-only Advanced test asserts no SetConfigJson or
-SetVolume, and compares rendered details with the actual demo configuration.
+and offline clearing. Advanced inspection asserts no writes on opening, and
+compares rendered details with the actual demo configuration. Explicit Advanced
+edits now use the guarded server API; operator E2E checks staged editing, actual
+readback, Master restoration and preserved drafts at phone width.

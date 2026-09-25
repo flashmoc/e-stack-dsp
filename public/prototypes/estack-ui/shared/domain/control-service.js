@@ -13,7 +13,7 @@
   const NO_SIGNAL_DBFS = -90;
   const listeners = new Set();
   let telemetryTimer = null;
-  let state = { config: null, master: null, inputPeaks: [], outputPeaks: [], heldPeaks: new Map(), links: loadLinks(), telemetryAt: 0 };
+  let state = { config: null, master: null, masterMuted: false, inputPeaks: [], outputPeaks: [], heldPeaks: new Map(), links: loadLinks(), telemetryAt: 0 };
 
   const emit = () => listeners.forEach(listener => listener(snapshot()));
   const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value)));
@@ -66,7 +66,7 @@
     return activeChannels().map(channel => {
       const peak = heldPeak(channel); const hard = M.hardLimitForChannel(state.config, channel); const protection = M.protectionForChannel(state.config, channel); const gain = M.gainEntryForChannel(state.config, channel);
       const muted = !!gain?.filter?.parameters?.mute;
-      const hasSignal = Number.isFinite(peak) && peak > NO_SIGNAL_DBFS;
+      const hasSignal = !muted && !state.masterMuted && Number.isFinite(peak) && peak > NO_SIGNAL_DBFS;
       const hardMargin = hasSignal && hard ? hard.clip - peak : null;
       const protectionMargin = hasSignal ? (protection?.threshold ?? hard?.clip ?? null) - peak : null;
       const limitVrms = M.CALIBRATED_LIMIT_VRMS[channel];
@@ -80,11 +80,17 @@
   }
   function snapshot() {
     const ways = state.config ? wayEntries().map(entry => ({ channel: entry.channel, ...M.way(entry.channel), gain: entry.gain, muted: entry.muted })) : [];
-    return { config: clone(state.config), master: state.master, ways, inputPeaks: [...state.inputPeaks], outputPeaks: [...state.outputPeaks], links: currentLinks(), trim: M.inputTrimValue(state.config), headroom: headroom(), system: systemHeadroom(), telemetryAt: state.telemetryAt };
+    return { config: clone(state.config), master: state.master, masterMuted: state.masterMuted, ways, inputPeaks: [...state.inputPeaks], outputPeaks: [...state.outputPeaks], links: currentLinks(), trim: M.inputTrimValue(state.config), headroom: headroom(), system: systemHeadroom(), telemetryAt: state.telemetryAt };
   }
   async function refresh() {
-    const [config, master] = await Promise.all([command('GetConfigJson'), command('GetVolume')]);
-    state.config = config; state.master = Number(master); emit(); return snapshot();
+    const [config, master, muted] = await Promise.all([command('GetConfigJson'), command('GetVolume'), command('GetMute')]);
+    state.config = config; state.master = Number(master); state.masterMuted = muted === true; emit(); return snapshot();
+  }
+  async function setMasterMute(muted) {
+    await command({ SetMute: !!muted });
+    const actual = await command('GetMute');
+    if (actual !== !!muted) throw new Error('Master mute readback did not match.');
+    state.masterMuted = actual; state.heldPeaks.clear(); emit(); return snapshot();
   }
   async function telemetry() {
     const [inputPeaks, outputPeaks] = await Promise.all([command('GetCaptureSignalPeak'), command('GetPlaybackSignalPeak')]);
@@ -175,5 +181,5 @@
     });
   }
 
-  window.EStackControlService = Object.freeze({ refresh, telemetry, startTelemetry, stopTelemetry, snapshot, setMaster, setLink, setWayGain, setWayMute, setInputTrim, availableInputTrim, normalizeWays, subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener); } });
+  window.EStackControlService = Object.freeze({ refresh, telemetry, startTelemetry, stopTelemetry, snapshot, setMaster, setMasterMute, setLink, setWayGain, setWayMute, setInputTrim, availableInputTrim, normalizeWays, subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener); } });
 })();

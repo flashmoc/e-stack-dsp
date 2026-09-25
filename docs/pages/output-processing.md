@@ -101,11 +101,14 @@ Active PEQs are deterministically ordered by slot before phase, Gain and Delay.
 
 ## Protection and graph
 
-Existing Compressor protection processors are read-only metrics in Stage 3A.
+The associated Compressor threshold follows the Hard Limiter by −1 dB.
 Hard Limiter filters remain mandatory and cannot be bypassed or removed by this
 page. When System Edit is unlocked, the exact existing limiter can change only
-`parameters.clip_limit`, range `-60…0 dBFS`, step `0.1`; type, soft clipping,
-description and placement are preserved.
+`parameters.clip_limit`, range `-60…0 dBFS`, step `0.1`, together with the
+associated compressor threshold. Type, soft clipping, description, placement,
+attack/release/ratio and other ways remain unchanged. The domain service calls
+POST /api/output-protection for a server-owned, workflow-locked, attenuated and
+verified transaction. Missing/shared protection is refused.
 
 The dense calibration workspace follows the per-way operator layout: six
 compact output selectors, response graph, Output/Align/Protection rack, and

@@ -616,6 +616,32 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
     }
   });
 
+  app.post("/api/system-presets/rename", jsonParser, async (req, res) => {
+    try {
+      const result = await gate(() => {
+        const name = String(req.body?.name || "").trim();
+        if (name.length < 3 || name.length > 80) throw new Error("Use a name of 3–80 characters");
+        const records = readSavedConfigs();
+        const record = records.find(r => r.type === SYSTEM_TYPE && String(r.id) === String(req.body?.id));
+        if (!record) throw new Error("System preset not found");
+        if (records.some(r => r !== record && r.type === SYSTEM_TYPE && r.name === name)) throw new Error("Name already exists");
+        const previous = clone(records), state = readState(), next = clone(state);
+        for (const [idKey, nameKey] of [["activeId", "activeName"], ["configId", "configName"], ["lastUsedId", "lastUsedName"], ["lastBootAppliedId", "lastBootAppliedName"]]) {
+          if ((next[idKey] != null && String(next[idKey]) === String(record.id)) || (next[idKey] == null && next[nameKey] === record.name)) {
+            next[idKey] = record.id;
+            next[nameKey] = name;
+          }
+        }
+        record.name = name;
+        store.atomicWrite(savedConfigsFile, records);
+        try { writeState(next); }
+        catch (error) { store.atomicWrite(savedConfigsFile, previous); throw error; }
+        return { id: record.id, name };
+      });
+      res.json(result);
+    } catch (error) { res.status(409).json({ reason: error.message }); }
+  });
+
   app.post("/api/system-presets/delete", jsonParser, async (req, res) => {
     try {
       await gate(() =>
@@ -818,6 +844,46 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
   return {
     scheduleBootApply,
     getState: publicState,
+    readProcessing: async () => {
+      const ws = await openDsp();
+      try {
+        const config = await dspRequest(ws, "GetConfigJson");
+        return { config, revision: require("./advancedModel").revision(config) };
+      } finally { ws.close(); }
+    },
     applyRecord: (record) => gate(() => applyRecord(record)),
+    // Advanced submits a typed operation, never a replacement configuration.
+    editProcessing: (expected, mutate) => gate(async () => {
+      assertNormalWorkflow();
+      const ws = await openDsp();
+      let attenuated = false, safeVolume = SAFE_BOOT_VOLUME_DB;
+      try {
+        const live = await dspRequest(ws, "GetConfigJson");
+        if (live.devices?.capture?.type === "SignalGenerator") throw new Error("Stop Signal Generator before editing processing");
+        const revision = require("./advancedModel").revision;
+        if (revision(live) !== expected) throw new Error("DSP changed since editing began. Refresh and review your changes.");
+        const next = mutate(clone(live));
+        if (JSON.stringify(stable(next.devices)) !== JSON.stringify(stable(live.devices))) throw new Error("Hardware devices are not editable here");
+        validateProcessingSnapshot(processingOf(next), next.mixers, next.devices);
+        const volume = await dspRequest(ws, "GetVolume");
+        if (!Number.isFinite(volume) || volume < -100 || volume > 0) throw new Error("Invalid live Master");
+        safeVolume = Math.min(volume, SAFE_BOOT_VOLUME_DB);
+        attenuated = true;
+        await dspRequest(ws, { SetVolume: safeVolume });
+        await dspRequest(ws, { SetConfigJson: JSON.stringify(next) });
+        const actual = await dspRequest(ws, "GetConfigJson");
+        if (revision(actual) !== revision(next)) throw new Error("Processing readback mismatch");
+        await dspRequest(ws, { SetVolume: volume });
+        const actualVolume = await dspRequest(ws, "GetVolume");
+        if (!Number.isFinite(actualVolume) || Math.abs(actualVolume - volume) > .05) throw new Error("Master readback mismatch");
+        return { config: actual, revision: revision(actual) };
+      } catch (error) {
+        if (attenuated) {
+          await dspRequest(ws, { SetVolume: safeVolume }).catch(() => {});
+          error.message += `; Master held at ${safeVolume} dB. Inspect the system before raising it.`;
+        }
+        throw error;
+      } finally { ws.close(); }
+    }),
   };
 };

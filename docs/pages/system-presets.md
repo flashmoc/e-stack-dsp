@@ -1,5 +1,9 @@
 # System Presets and Startup Configuration
 
+Saved systems can be renamed by ID through /api/system-presets/rename. Names
+must be unique within estack-system. Snapshot data, ID and creation date remain
+unchanged; active/startup/last-used/boot-applied reference names follow the rename.
+
 Software validation uses the canonical Linux demo. Raspberry hardware acceptance
 is pending; this feature does not change hardware YAML or deployment scripts.
 

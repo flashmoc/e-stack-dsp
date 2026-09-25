@@ -57,3 +57,16 @@ collection. Historical array clients must send the current ETag as If-Match.
 Stale or missing revisions return 409. Both forms reject changes to estack-system
 records: use the owned System Preset API. This explicit compatibility tightening
 prevents stale Global EQ/legacy writes from erasing concurrent system changes.
+
+## Expert processing and protection
+
+GET /api/advanced returns live config plus its revision. POST /api/advanced/edit
+accepts {revision, operation} for filter/processor parameters, an existing mixer
+source, neutral filter insertion or permitted deletion, never raw config upload.
+POST /api/output-protection accepts {channel, clip} and changes only that way's
+limiter ceiling and compressor threshold (clip − 1 dB). Both use the server
+workflow gate and verified safe-Master transaction.
+
+POST /api/system-presets/rename accepts {id, name}. It keeps the record ID,
+data and creation date, rejects duplicate names and updates matching active,
+startup, last-used and boot-applied names without contacting the DSP.

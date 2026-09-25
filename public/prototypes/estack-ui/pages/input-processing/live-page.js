@@ -35,6 +35,7 @@
     document.querySelectorAll('#eqReset,#bandReset,#savePreset,#loadPreset,#deletePreset').forEach(el => { el.disabled = busy || !latest; });
     $('#loadPreset').disabled = busy || !selectedPresetId;
     $('#deletePreset').disabled = busy || !selectedPresetId;
+    $('#renamePreset').disabled = busy || !selectedPresetId;
     $('#applyImport').disabled = busy || !pendingImport;
     $('#eqInspector').setAttribute('aria-busy', String(busy));
   }
@@ -199,6 +200,17 @@
       await applyCompleteBands(record.data.bands, `Preset '${record.name}'`); presetStatus(`'${record.name}' loaded.`, 'success');
     } catch (error) { presetStatus(`LOAD ERROR · ${error.message}`, 'error'); }
   }
+  async function renameSelectedPreset() {
+    if (!selectedPresetId) return;
+    try {
+      const record = await savedConfigs.getById(selectedPresetId);
+      if (!record) throw new Error('Preset no longer exists.');
+      const name = prompt('New preset name', record.name)?.trim();
+      if (!name || name === record.name) return;
+      await savedConfigs.rename(record.id, name);
+      await refreshPresetList(); presetStatus(`'${name}' renamed.`, 'success');
+    } catch (error) { presetStatus(error.message, 'error'); }
+  }
   async function deleteSelectedPreset() {
     if (!selectedPresetId) { presetStatus('Select a preset first.', 'error'); return; }
     try { const record = await savedConfigs.getById(selectedPresetId); if (!record) throw new Error('Preset no longer exists.'); if (!confirm(`Delete Global EQ preset '${record.name}'?`)) return; await savedConfigs.delete(record.id); await refreshPresetList(); presetStatus(`'${record.name}' deleted.`, 'success'); }
@@ -241,7 +253,7 @@
     });
     $('#applyImport').addEventListener('click',async()=>{if(!pendingImport||busy)return;const parsed=pendingImport;try{await applyCompleteBands(parsed.bands);importStatus(`${parsed.detected} band${parsed.detected===1?'':'s'} imported.`,'success');pendingImport=null;$('#applyImport').disabled=true;}catch(error){importStatus(error.message,'error');}});
     $('#presetEq').addEventListener('click',async()=>{$('#presetDialog').showModal();presetStatus('Loading presets…');try{await refreshPresetList();presetStatus('Select a preset or save the current EQ.');}catch(error){presetStatus(error.message,'error');}});
-    $('#savePreset').addEventListener('click',saveCurrentPreset);$('#loadPreset').addEventListener('click',loadSelectedPreset);$('#deletePreset').addEventListener('click',deleteSelectedPreset);
+    $('#savePreset').addEventListener('click',saveCurrentPreset);$('#loadPreset').addEventListener('click',loadSelectedPreset);$('#deletePreset').addEventListener('click',deleteSelectedPreset);$('#renamePreset').addEventListener('click',renameSelectedPreset);
     new ResizeObserver(draw).observe($('#eqCanvas'));
   }
   mount();bind();setBusy();service.subscribe(snapshot=>{latest={...snapshot,slots:snapshot.slots.map(b=>({...b}))};render();});

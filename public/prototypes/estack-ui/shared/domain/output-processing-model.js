@@ -129,7 +129,29 @@
     if (value !== gain.filter.parameters.gain && value !== normalizeGain(value)) throw new Error('Output Gain must be -60…+6 dB in 0.1 dB steps.');
   }
   function assertDelayMutation(before, after, channel) { const delay = entryForType(before, channel, 'Delay'); assertParamOnly(before, after, delay.name, 'Delay', ['delay']); }
-  function assertLimiterMutation(before, after, channel) { const limiter = limiterEntry(before, channel); assertParamOnly(before, after, limiter.name, 'Limiter', ['clip_limit']); }
+  function protectionPair(config, channel) {
+    const limiter = limiterEntry(config, channel);
+    const candidates = (config.pipeline || []).filter(step => step.type === 'Processor' && !step.bypassed)
+      .map(step => ({ name: step.name, processor: config.processors?.[step.name] }))
+      .filter(entry => entry.processor?.type === 'Compressor' && entry.processor.parameters?.process_channels?.includes(Number(channel)));
+    if (!limiter || candidates.length !== 1 || candidates[0].processor.parameters.process_channels.length !== 1)
+      throw new Error('Protection requires one independent compressor and hard limiter for this way.');
+    const owners = WAY_DEFINITIONS.filter(way => limiterEntry(config, way.channel)?.name === limiter.name);
+    if (owners.length !== 1) throw new Error('A shared hard limiter cannot be edited per way.');
+    return { limiter, compressor: candidates[0] };
+  }
+  function assertLimiterMutation(before, after, channel) {
+    const { limiter, compressor } = protectionPair(before, channel);
+    assertReferences(after);
+    const clip = after.filters?.[limiter.name]?.parameters?.clip_limit;
+    const threshold = after.processors?.[compressor.name]?.parameters?.threshold;
+    if (!Number.isFinite(clip) || clip < -60 || clip > 0 || Math.abs(threshold - (clip - 1)) > 1e-6)
+      throw new Error('Compressor threshold must be exactly 1 dB below the hard limiter.');
+    const restored = clone(after);
+    restored.filters[limiter.name].parameters.clip_limit = limiter.filter.parameters.clip_limit;
+    restored.processors[compressor.name].parameters.threshold = compressor.processor.parameters.threshold;
+    if (fingerprint(before) !== fingerprint(restored)) throw new Error('Protected DSP configuration changed unexpectedly.');
+  }
   function assertCrossoverMutation(before, after, channel, edge) {
     const entry = crossovers(before, channel)[edge]; if (!entry) throw new Error(`${way(channel).name}: ${edge.toUpperCase()} crossover is unavailable.`);
     assertParamOnly(before, after, entry.name, 'BiquadCombo', ['type', 'freq', 'order']);
@@ -165,5 +187,5 @@
     const xo = Object.values(data.crossover).reduce((sum, item) => sum + crossoverMagnitude(item?.filter, frequency), 0); const peq = data.peq.reduce((sum, item) => sum + (!item || disabled.has(item.slot) ? 0 : peqMagnitude(item.filter, frequency, config.devices?.samplerate)), 0);
     return xo + peq + Number(data.gain.filter.parameters?.gain || 0);
   }
-  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
+  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, protectionPair, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
 })();

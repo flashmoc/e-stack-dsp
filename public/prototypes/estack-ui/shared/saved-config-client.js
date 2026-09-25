@@ -30,5 +30,16 @@
     const base = clone(all);
     all.splice(index, 1); await writeAll(all, base); return true;
   }
-  window.EStackSavedConfigClient = Object.freeze({ loadAll, listByType, getById, save, delete: remove });
+  async function rename(id, value) {
+    const name = String(value || '').trim();
+    if (!name || name.length > 80) throw new Error('Use a name of 1–80 characters.');
+    const all = await loadAll(), base = clone(all);
+    const record = all.find(item => String(item.id) === String(id));
+    if (!record) throw new Error('Preset no longer exists.');
+    if (record.type === 'estack-system') throw new Error('Use the System Preset service.');
+    if (all.some(item => item !== record && item.type === record.type && item.name === name)) throw new Error('Name already exists.');
+    record.name = name;
+    await writeAll(all, base); return clone(record);
+  }
+  window.EStackSavedConfigClient = Object.freeze({ loadAll, listByType, getById, save, rename, delete: remove });
 })();
