@@ -43,6 +43,7 @@ test('Advanced stages edits, verifies apply, preserves drafts and supports mixer
   page.on('dialog', dialog => dialog.accept());
   try {
     const f = await frame(page, 'advanced');
+    await f.locator('[data-kind="filters"]').click();
     await expect(f.locator('#component')).toBeVisible();
     await f.locator('#component').selectOption('sub_gain');
     const gain = f.getByRole('spinbutton', { name:'Gain · dB', exact:true });
@@ -60,7 +61,7 @@ test('Advanced stages edits, verifies apply, preserves drafts and supports mixer
     await f.locator('[data-kind="processors"]').click();
     await expect(f.locator('#component')).toBeVisible();
     await f.locator('[data-kind="pipeline"]').click();
-    await expect(f.locator('.pipeline-stage')).toHaveCount(original.pipeline.length);
+    await expect(f.locator('.signal-path')).toHaveCount(original.devices.playback.channels);
     for (const width of [1440,390]) {
       await page.setViewportSize({width,height:width===390?844:900});
       await f.locator('[data-kind="filters"]').click();

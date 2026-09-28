@@ -2,7 +2,10 @@
   'use strict';
   const { B, $, post, note } = window.EStackSurface;
   const clone = value => JSON.parse(JSON.stringify(value));
-  let config, revision, kind = 'filters', selected = '', dirty = false, busy = false, draft;
+  let config, revision, kind = 'pipeline', selected = '', dirty = false, busy = false, draft;
+  let pathSelection = matchMedia('(max-width: 700px)').matches ? '0' : 'all';
+  const wayNames = ['SUB', 'KICK', 'MID L', 'MID R', 'HIGH L', 'HIGH R'];
+  const wayName = channel => wayNames[channel] || `OUT ${channel + 1}`;
   const types = {
     Gain: { gain: 0, inverted: false, mute: false, scale: 'dB' },
     Volume: { ramp_time: 400, fader: 'Aux1' },
@@ -76,29 +79,169 @@
   }
   function mixer() {
     $('editor').replaceChildren();
-    (config.mixers[selected]?.mapping || []).forEach((mapping, m) => {
-      const section = el('section', null, 'mixer-destination'); section.append(el('h3', `Output ${mapping.dest + 1}`));
+    const mixer = config.mixers[selected];
+    if (!mixer) return;
+    const introduction = el('div', null, 'mixer-intro');
+    introduction.append(el('strong', selected), el('span', `${mixer.channels.in} inputs → ${mixer.channels.out} outputs · live routing`));
+    $('editor').append(introduction);
+    const destinations = el('div', null, 'mixer-destinations');
+    (mixer.mapping || []).forEach((mapping, m) => {
+      const section = el('section', null, 'mixer-destination');
+      const heading = el('header', null, 'mixer-destination-head');
+      heading.append(el('h3', wayName(mapping.dest)), el('small', `OUT ${mapping.dest + 1} · ${mapping.sources.length} source${mapping.sources.length === 1 ? '' : 's'}`));
+      section.append(heading);
       mapping.sources.forEach((source, s) => {
         const form = el('div', null, 'mixer-source'), value = { channel: source.channel, gain: source.gain, mute: !!source.mute, inverted: !!source.inverted };
-        for (const key of ['channel', 'gain', 'mute', 'inverted']) form.append(field(key, value[key], next => value[key] = next));
+        const sourceHead = el('div', null, 'mixer-source-head');
+        sourceHead.append(el('strong', `INPUT ${source.channel + 1}`));
+        const peak = el('output', '— dBFS', 'capture-peak');
+        peak.dataset.capturePeak = String(source.channel);
+        sourceHead.append(peak);
+        form.append(sourceHead);
+        const meter = el('div', null, 'capture-level');
+        meter.dataset.captureBar = String(source.channel);
+        meter.append(el('i'));
+        form.append(meter);
+        const channelField = el('label', 'Input channel');
+        const channelSelect = el('select');
+        channelSelect.setAttribute('aria-label', 'Input channel');
+        for (let input = 0; input < mixer.channels.in; input++) channelSelect.append(new Option(`IN ${input + 1}`, String(input)));
+        channelSelect.value = String(value.channel);
+        channelSelect.addEventListener('change', () => { value.channel = Number(channelSelect.value); mark(); });
+        channelField.append(channelSelect);
+        form.append(channelField);
+        for (const key of ['gain', 'mute', 'inverted']) form.append(field(key, value[key], next => value[key] = next));
         form.append(button('Apply source', () => commit({ kind: 'mixer', name: selected, mapping: m, source: s, value }), 'primary'));
         section.append(form);
       });
-      $('editor').append(section);
+      destinations.append(section);
     });
+    $('editor').append(destinations);
+    updateCapturePeaks();
     $('advancedForm').querySelector('.editor-actions').hidden = true;
   }
-  function pipeline() {
-    $('pipelineEditor').replaceChildren();
-    (config.pipeline || []).forEach((stage, index) => {
-      const row = el('section', null, 'pipeline-stage');
-      row.append(el('h3', `${String(index + 1).padStart(2, '0')} · ${stage.type}`), el('small', stage.channels ? `Channels ${stage.channels.map(c => c + 1).join(', ')}` : stage.name));
-      const names = stage.names || (stage.name ? [stage.name] : []), links = el('div', null, 'stage-filters');
-      names.forEach(name => links.append(button(name, () => { kind = stage.type === 'Mixer' ? 'mixers' : stage.type === 'Processor' ? 'processors' : 'filters'; selected = name; render(); })));
-      row.append(links);
-      if (stage.type === 'Filter') row.append(button('+ Add filter', () => { const name = prompt('New filter name'); if (name) commit({ kind: 'insertFilter', stage: index, name: name.trim() }); }));
-      $('pipelineEditor').append(row);
+  let readingPeaks = false;
+  async function updateCapturePeaks() {
+    if (kind !== 'mixers' || readingPeaks || B.mode !== 'camillanode') return;
+    readingPeaks = true;
+    let peaks = null;
+    try {
+      const result = await B.command('GetCaptureSignalPeak');
+      if (Array.isArray(result)) peaks = result;
+    } catch (_) { /* No synthetic meter values when the capture reading is unavailable. */ }
+    document.querySelectorAll('[data-capture-peak]').forEach(output => {
+      const level = peaks?.[Number(output.dataset.capturePeak)];
+      output.textContent = Number.isFinite(level) ? `${level.toFixed(1)} dBFS` : '— dBFS';
     });
+    document.querySelectorAll('[data-capture-bar]').forEach(bar => {
+      const level = peaks?.[Number(bar.dataset.captureBar)];
+      bar.firstElementChild.style.width = Number.isFinite(level) ? `${Math.max(0, Math.min(100, (level + 60) / 60 * 100))}%` : '0%';
+    });
+    readingPeaks = false;
+  }
+  function filterSummary(definition) {
+    if (!definition) return 'Definition unavailable';
+    const p = definition.parameters || {};
+    if (definition.type === 'Gain') return `${Number(p.gain).toFixed(1)} dB${p.mute ? ' · muted' : ''}${p.inverted ? ' · inverted' : ''}`;
+    if (definition.type === 'Delay') return `${p.delay} ${p.unit || 'ms'}`;
+    if (definition.type === 'Limiter') return `${p.clip_limit} dBFS ceiling`;
+    if (definition.type === 'BiquadCombo' && p.type && p.freq != null) {
+      const family = p.type.startsWith('LinkwitzRiley') ? 'LR' : p.type.startsWith('Butterworth') ? 'Butterworth' : p.type;
+      const edge = p.type.endsWith('Highpass') ? 'high-pass' : p.type.endsWith('Lowpass') ? 'low-pass' : '';
+      return `${family} ${edge} · ${p.freq} Hz`;
+    }
+    if (p.freq != null) return `${p.type || definition.type} · ${p.freq} Hz${p.gain == null ? '' : ` · ${p.gain} dB`}`;
+    return p.type || definition.type;
+  }
+  function openComponent(nextKind, name) {
+    kind = nextKind; selected = name; dirty = false; render();
+  }
+  function pipeline() {
+    const root = $('pipelineEditor');
+    root.replaceChildren();
+    const mixerIndex = (config.pipeline || []).findIndex(step => step.type === 'Mixer');
+    const mixerStep = config.pipeline?.[mixerIndex];
+    const mixerDefinition = config.mixers?.[mixerStep?.name];
+    const count = config.devices?.playback?.channels || mixerDefinition?.channels?.out || 0;
+    const header = el('header', null, 'path-heading');
+    const title = el('div');
+    title.append(el('h2', 'Signal paths'), el('p', 'Live processing order · select a component to inspect or edit it.'));
+    const select = el('select');
+    select.id = 'pathOutput';
+    select.setAttribute('aria-label', 'Choose output signal path');
+    select.append(new Option('All outputs', 'all'));
+    for (let channel = 0; channel < count; channel++) select.append(new Option(`${wayName(channel)} · OUT ${channel + 1}`, String(channel)));
+    if (pathSelection !== 'all' && Number(pathSelection) >= count) pathSelection = 'all';
+    select.value = pathSelection;
+    select.addEventListener('change', () => { pathSelection = select.value; pipeline(); });
+    header.append(title, select);
+    root.append(header);
+    const list = el('div', null, 'signal-paths');
+    for (let channel = 0; channel < count; channel++) {
+      if (pathSelection !== 'all' && pathSelection !== String(channel)) continue;
+      const mapping = mixerDefinition?.mapping?.find(entry => entry.dest === channel);
+      const sources = mapping?.sources || [];
+      const activeSources = sources.filter(source => !source.mute);
+      const sourceChannels = new Set(activeSources.map(source => source.channel));
+      const path = el('section', null, 'signal-path');
+      path.dataset.outputChannel = String(channel);
+      const pathTitle = el('header', null, 'signal-path-title');
+      pathTitle.append(el('h3', wayName(channel)), el('span', `OUT ${channel + 1} · ${sources.length ? `${sources.length} input${sources.length === 1 ? '' : 's'}` : 'No mixer source'}`));
+      path.append(pathTitle);
+      const chain = el('div', null, 'signal-chain');
+      const input = el('div', null, 'path-endpoint');
+      input.append(el('small', 'CAPTURE'), el('strong', activeSources.length ? [...new Set(activeSources.map(source => `IN ${source.channel + 1}`))].join(' + ') : 'NO ACTIVE INPUT'));
+      chain.append(input);
+      (config.pipeline || []).forEach((stage, index) => {
+        const beforeMixer = mixerIndex < 0 || index < mixerIndex;
+        if (stage.type === 'Mixer') {
+          if (index !== mixerIndex || !mapping) return;
+          const node = el('div', null, 'path-step path-mixer');
+          node.dataset.stage = String(index);
+          if (stage.bypassed) node.classList.add('is-bypassed');
+          node.append(el('small', `${String(index + 1).padStart(2, '0')} · MIXER`));
+          node.append(button(stage.name, () => openComponent('mixers', stage.name), 'path-component'));
+          node.append(el('span', sources.map(source => `IN ${source.channel + 1} ${Number(source.gain).toFixed(1)} dB${source.mute ? ' MUTED' : ''}`).join('  +  ') || 'No source'));
+          if (stage.bypassed) node.append(el('em', 'Bypassed'));
+          chain.append(node);
+          return;
+        }
+        const channels = stage.channels || (stage.channel == null ? [] : [stage.channel]);
+        if (stage.type === 'Filter' && !channels.some(source => beforeMixer ? sourceChannels.has(source) : source === channel)) return;
+        if (stage.type === 'Processor') {
+          const owned = config.processors?.[stage.name]?.parameters?.process_channels || [];
+          if (!owned.some(source => beforeMixer ? sourceChannels.has(source) : source === channel)) return;
+        }
+        if (!['Filter', 'Processor'].includes(stage.type)) return;
+        const names = stage.type === 'Filter' ? stage.names || [] : [stage.name];
+        for (const name of names) {
+          const definition = stage.type === 'Filter' ? config.filters?.[name] : config.processors?.[name];
+          const node = el('div', null, 'path-step');
+          node.dataset.stage = String(index);
+          if (stage.bypassed) node.classList.add('is-bypassed');
+          node.append(el('small', `${String(index + 1).padStart(2, '0')} · ${definition?.type || stage.type}`));
+          node.append(button(name, () => openComponent(stage.type === 'Filter' ? 'filters' : 'processors', name), 'path-component'));
+          node.append(el('span', stage.type === 'Filter' ? filterSummary(definition) : `Threshold ${definition?.parameters?.threshold ?? '—'} dBFS`));
+          if (stage.bypassed) node.append(el('em', 'Bypassed'));
+          if (stage.type === 'Filter' && !stage.bypassed && name === names[0]) {
+            const shared = beforeMixer || channels.length > 1;
+            const add = button(shared ? '+ Shared filter' : '+ Filter', () => {
+              const next = prompt(`New filter name for ${shared ? 'shared' : wayName(channel)} stage ${index + 1}`);
+              if (next) commit({ kind: 'insertFilter', stage: index, name: next.trim() });
+            }, 'path-add');
+            add.title = `Stage ${index + 1} applies to ${beforeMixer ? 'input' : 'output'} channels ${channels.map(value => value + 1).join(', ')}`;
+            node.append(add);
+          }
+          chain.append(node);
+        }
+      });
+      const output = el('div', null, 'path-endpoint');
+      output.append(el('small', 'PLAYBACK'), el('strong', `OUT ${channel + 1}`));
+      chain.append(output);
+      path.append(chain);
+      list.append(path);
+    }
+    root.append(list);
   }
   function render() {
     document.querySelectorAll('[data-kind]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
@@ -126,6 +269,8 @@
   $('discard').addEventListener('click', () => { dirty = false; render(); });
   $('component').addEventListener('change', () => { if (dirty && !confirm('Discard unapplied changes?')) { $('component').value = selected; return; } dirty = false; selected = $('component').value; render(); });
   document.querySelectorAll('[data-kind]').forEach(button => button.addEventListener('click', () => { if (busy || (dirty && !confirm('Discard unapplied changes?'))) return; dirty = false; kind = button.dataset.kind; render(); }));
+  const captureTimer = setInterval(updateCapturePeaks, 500);
+  addEventListener('pagehide', () => clearInterval(captureTimer));
   addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
   window.EStackAdvancedEditor = { receive(next, version) { if (!dirty && !busy) { config = clone(next); revision = version; render(); } }, holding: () => dirty || busy };
 })();

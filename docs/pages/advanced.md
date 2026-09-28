@@ -4,7 +4,22 @@ Advanced is the expert processing workspace. Its functional reference is legacy
 CamillaNode `public/src/advanced.js` and `filter.js`; neither is loaded by the
 product. The topology inspector is retained as a secondary disclosure.
 
-The main workspace has Filters, Mixers, Processors and Pipeline sections:
+The main workspace opens on **Signal paths**. It derives each playback channel's
+capture sources, applicable input filters, mixer mapping, output filters,
+processors and final limiter from the live pipeline, preserving their actual
+stage order. Each component opens its existing typed editor. Desktop shows all
+outputs with independently scrollable paths; phone focuses one output at a
+time. Unrouted outputs remain visible as such. The full original stage list
+remains in the secondary inspector.
+
+The **Mixer** view groups mappings by destination, shows every input source's
+gain, mute and inversion, and reads actual capture peaks for a live level and
+meter. If capture telemetry is unavailable, it shows no fabricated reading.
+Input channel selection is presented as IN 1…N while the server operation
+continues to use CamillaDSP's zero-based channel index. Source changes still
+use the guarded server transaction.
+
+Filters and Processors retain the existing exact editor. In all sections:
 
 - Filter type/subtype and exact numeric, boolean, enum and array parameters.
   Gain, Volume, Loudness, Delay, convolution, Biquad, BiquadCombo, Dither and
@@ -26,8 +41,8 @@ server owns attenuation, reference validation, full readback and Master restore.
 Failure after attenuation holds Master at the safe level.
 
 Opening/inspecting never writes. Polling pauses during a draft/apply, preserving
-focus. Phone uses a compact section selector, two-column editor and explicit
-Apply/Discard actions. Raw JSON stays read-only. This replaces the earlier
+focus. Phone uses compact section tabs, an output selector, a vertical signal
+path and explicit Apply/Discard actions. Raw JSON stays read-only. This replaces the earlier
 read-only-only product policy at the user's request, without a raw upload editor.
 
 Software-tested in the Linux demo. No Raspberry was contacted; hardware

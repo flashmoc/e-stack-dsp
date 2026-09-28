@@ -28,10 +28,10 @@
       <p id="notice" role="status"></p>
       <section class="advanced-workspace" aria-label="Advanced processing editor">
         <nav class="advanced-tabs" aria-label="Processing section">
-          <button data-kind="filters" aria-pressed="true">Filters</button>
-          <button data-kind="mixers" aria-pressed="false">Mixers</button>
+          <button data-kind="pipeline" aria-pressed="true">Signal paths</button>
+          <button data-kind="mixers" aria-pressed="false">Mixer</button>
+          <button data-kind="filters" aria-pressed="false">Filters</button>
           <button data-kind="processors" aria-pressed="false">Processors</button>
-          <button data-kind="pipeline" aria-pressed="false">Pipeline</button>
         </nav>
         <div class="advanced-selection"><label>Selected component<select id="component"></select></label><span id="componentContext" class="muted"></span></div>
         <form id="advancedForm"><div id="editor"></div><footer class="editor-actions"><output id="draftState">Live settings</output><button type="button" id="discard">Discard</button><button type="submit" id="applyEdit" class="primary">Apply changes</button></footer></form>
