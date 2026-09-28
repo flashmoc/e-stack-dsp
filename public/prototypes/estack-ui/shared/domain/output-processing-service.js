@@ -23,6 +23,15 @@
   async function setGain(channel, value) {
     return transact(next => { const entry = M.entryForType(next, channel, 'Gain'); entry.filter.parameters.gain = M.normalizeGain(value); }, (before, after) => M.assertGainMutation(before, after, channel));
   }
+  async function setLinkedGain(channel, value) {
+    const numeric = Number(channel);
+    const channels = [2, 3].includes(numeric) ? [2, 3] : [4, 5].includes(numeric) ? [4, 5] : null;
+    if (!channels) throw new Error('Only MID L/R and HIGH L/R can have linked Gain.');
+    const target = M.normalizeGain(value);
+    return transact(next => {
+      channels.forEach(item => { M.entryForType(next, item, 'Gain').filter.parameters.gain = target; });
+    }, (before, after) => M.assertLinkedGainMutation(before, after, channels, target));
+  }
   async function setMute(channel, muted) { return transact(next => { M.entryForType(next, channel, 'Gain').filter.parameters.mute = !!muted; }, (before, after) => M.assertGainMutation(before, after, channel)); }
   async function setPolarity(channel, inverted) { return transact(next => { M.entryForType(next, channel, 'Gain').filter.parameters.inverted = !!inverted; }, (before, after) => M.assertGainMutation(before, after, channel)); }
   async function setDelay(channel, value) {
@@ -86,5 +95,5 @@
   async function deletePeq(channel, slot, disabledSlots = []) {
     return transact(next => { delete next.filters[M.peqName(channel, slot)]; syncPeq(next, channel, disabledSlots); }, (before, after) => M.assertPeqMutation(before, after, channel));
   }
-  window.EStackOutputProcessingService = Object.freeze({ refresh, snapshot, setGain, setMute, setPolarity, setDelay, setHardLimiter, setCrossover, setPhase, addPeq, setPeq, resetPeq, deletePeq, subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener); } });
+  window.EStackOutputProcessingService = Object.freeze({ refresh, snapshot, setGain, setLinkedGain, setMute, setPolarity, setDelay, setHardLimiter, setCrossover, setPhase, addPeq, setPeq, resetPeq, deletePeq, subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener); } });
 })();

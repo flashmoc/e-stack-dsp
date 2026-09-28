@@ -47,9 +47,16 @@ Gain, mute and polarity use each way’s existing `Gain` filter:
 The Gain identity is the same verified per-way identity as Control. Output
 Processing retains its own narrow writer, with the same `−60…+6 dB`, `0.1 dB`
 operator range as Control. `GAIN_RANGE` and `normalizeGain()` in the Output
-model define that range; the UI, tile gain bars and service use it. Gain mutation
+model define that range; the UI and service use it. Gain mutation
 readback also rejects a changed gain outside this range or step. Reading an older
 configuration never silently rewrites its gain.
+
+MID L/R and HIGH L/R Gain links use the same browser-local choices as Control
+(`estack.control.link.mid` and `.high`, linked by default). The link applies to
+the next Gain adjustment, not to mute, polarity, delay, PEQ or protection. A
+linked adjustment updates both existing Gain filters in one guarded config
+transaction and verifies both values on readback. Toggling a link alone makes
+no DSP write and does not silently synchronize different current values.
 
 Per-way delay changes only the existing Delay filter’s `parameters.delay`:
 `0…100 ms`, step `0.01 ms`. Its `unit` and `subsample` properties are
@@ -148,7 +155,8 @@ fake analyzer or apply/revert model.
 
 ## Frontend rendering and calibration workspace
 
-The Output frontend uses a six-way color strip, a wide response plot, and a
+The Output frontend places a compact six-way selection rail beneath the wide
+response plot, aligned with the Input EQ band rail, and uses a
 horizontal Gain / Delay / Phase alignment row. Gain and phase have sliders plus
 exact fields; delay has an exact field and four millisecond nudges. PEQ uses
 stable horizontal rows with frequency/gain/Q entry. HPF and LPF have logarithmic
@@ -174,7 +182,7 @@ unchanged theoretical response. Phase mode does not redraw on spectrum ticks.
 ResizeObserver invalidates geometry through the path cache key. Response
 mathematics, topology, service transactions and transport remain unchanged.
 
-At desktop widths all six ways remain in one row, with PEQ beside crossover.
+At desktop widths all six ways remain in one row beneath the plot, with PEQ beside crossover.
 Below 1200 CSS pixels alignment reflows and PEQ/crossover become full-width
 sections; below 850 the way selector scrolls horizontally within its own bounds.
 Below 600 PEQ fields recompose into labeled rows and crossover edges stack.
@@ -193,8 +201,7 @@ pending.
 
 ## Touch and product polish
 
-Way tiles include a subtle semantic-color gain bar derived from the live Gain
-value on the same −60…+6 dB scale. It is a configuration gain indicator, not
+Way tiles show the current live Gain numerically on the −60…+6 dB scale, not
 a signal-level meter. Output state (`ON` / `MUTED`) is separate from its
 `Mute` / `Unmute` action.
 

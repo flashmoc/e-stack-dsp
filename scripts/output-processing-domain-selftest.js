@@ -78,6 +78,25 @@ function create(config) {
   await service.setGain(0, gainBaseline.filters.sub_gain.parameters.gain);
   assert.deepStrictEqual(get(), gainBaseline);
 
+  for (const [channel, targets] of [[2, [[2, 'mid_l_gain'], [3, 'mid_r_gain']]], [5, [[4, 'high_l_gain'], [5, 'high_r_gain']]]]) {
+    const names = targets.map(([, name]) => name);
+    const original = get();
+    await service.setLinkedGain(channel, -8.7);
+    const linked = get();
+    names.forEach(name => assert.strictEqual(linked.filters[name].parameters.gain, -8.7));
+    const restored = clone(linked);
+    names.forEach(name => { restored.filters[name].parameters.gain = original.filters[name].parameters.gain; });
+    assert.deepStrictEqual(restored, original, 'linked gain changed another DSP field');
+    const illegal = clone(linked); illegal.filters[names[1]].parameters.mute = true;
+    assert.throws(() => model.assertLinkedGainMutation(original, illegal, channel === 2 ? [2, 3] : [4, 5], -8.7), /outside its permitted parameter/);
+    const wrongReadback = clone(linked); wrongReadback.filters[names[1]].parameters.gain = -8.8;
+    assert.throws(() => model.assertLinkedGainMutation(original, wrongReadback, channel === 2 ? [2, 3] : [4, 5], -8.7), /readback differs/);
+    assert.throws(() => model.assertLinkedGainMutation(original, linked, [0, 1], -8.7), /Only MID/);
+    for (const [targetChannel, name] of targets) await service.setGain(targetChannel, original.filters[name].parameters.gain);
+    assert.deepStrictEqual(get(), original);
+  }
+  await assert.rejects(() => service.setLinkedGain(0, -8), /Only MID/);
+
   let before = get(); const midRefs = before.pipeline.filter(step => step.type === 'Filter' && [2, 3].includes(step.channels?.[0])).map(step => clone(step.names));
   await service.setCrossover(2, 'hpf', { freq: 301, family: 'LinkwitzRiley', slope: 24 }); let changed = get();
   assert.strictEqual(changed.filters.mid_hpf_300_lr24.parameters.freq, 301); assert.deepStrictEqual(changed.pipeline.filter(step => step.type === 'Filter' && [2, 3].includes(step.channels?.[0])).map(step => step.names), midRefs);

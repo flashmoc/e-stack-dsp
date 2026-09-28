@@ -24,6 +24,13 @@
   const disabledSlots = channel => model.PEQ_DEFAULT_FREQUENCIES.map((_, slot) => slot).filter(slot => localStorage.getItem(disabledKey(channel, slot)) === 'true');
   const setDisabled = (channel, slot, value) => value ? localStorage.setItem(disabledKey(channel, slot), 'true') : localStorage.removeItem(disabledKey(channel, slot));
   const selected = () => latest?.ways?.find(item => item.channel === selectedChannel);
+  const gainLinks = {
+    mid: localStorage.getItem('estack.control.link.mid') !== 'false',
+    high: localStorage.getItem('estack.control.link.high') !== 'false'
+  };
+  const gainPair = channel => [2, 3].includes(channel) ? 'mid' : [4, 5].includes(channel) ? 'high' : null;
+  const gainPartner = channel => channel === 2 ? 3 : channel === 3 ? 2 : channel === 4 ? 5 : channel === 5 ? 4 : null;
+  const gainLinked = channel => !!gainLinks[gainPair(channel)];
   const locked = () => !editing || busy;
   const status = (text, kind = '') => { $('#outputState').textContent = text; $('#outputState').className = `ui-status ${kind ? `is-${kind}` : ''}`; };
   const text = (selector, value) => { const el = $(selector); if (el && el.textContent !== String(value)) el.textContent = value; };
@@ -89,7 +96,7 @@
   }
   function updateSelector() {
     if (!$('#waySelector').children.length) {
-      $('#waySelector').innerHTML = latest.ways.map(w => `<button type="button" class="way-card" data-way-channel="${w.channel}" data-way-color="${w.color}"><span class="way-heading"><strong>${w.name}</strong><small>OUT ${w.channel + 1}</small></span><span class="way-gain"></span><span class="way-detail"></span><meter class="way-gain-bar" min="${model.GAIN_RANGE.min}" max="${model.GAIN_RANGE.max}" aria-label="${w.name} gain" title="Output gain · −60…+6 dB"></meter></button>`).join('');
+      $('#waySelector').innerHTML = latest.ways.map(w => `<button type="button" class="way-card" data-way-channel="${w.channel}" data-way-color="${w.color}"><span class="way-heading"><strong>${w.name}</strong></span><span class="way-gain"></span><span class="way-detail"></span></button>`).join('');
       $('#compareWay').innerHTML = '<option value="">None</option>' + latest.ways.map(w => `<option value="${w.channel}">${w.name}</option>`).join('');
       $('#xoPair').innerHTML = graph.XO_PAIRS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
     }
@@ -99,8 +106,12 @@
       el.querySelector('.way-gain').textContent = db(g.gain);
       el.querySelector('.way-detail').textContent = `${g.mute ? 'MUTED' : 'ON'} · ${Number(w.delay.filter.parameters.delay).toFixed(2)} ms${g.inverted ? ' · INV' : ''}`;
       el.classList.toggle('is-muted', !!g.mute);
-      el.querySelector('.way-gain-bar').value = model.normalizeGain(g.gain);
-      el.querySelector('.way-gain-bar').setAttribute('aria-valuetext',db(g.gain));
+    });
+    $$('[data-gain-link]').forEach(button => {
+      const pair = button.dataset.gainLink, linked = gainLinks[pair];
+      button.setAttribute('aria-pressed', String(linked));
+      button.textContent = `${pair.toUpperCase()} L/R · ${linked ? 'LINKED' : 'FREE'}`;
+      button.title = 'Gain only · applies to the next adjustment';
     });
   }
   function createPeqRow(slot) {
@@ -207,9 +218,11 @@
         const current = {gain:item.gain.filter.parameters.gain, delay:item.delay.filter.parameters.delay, phase:model.phaseDegrees(latest.config,channel), limiter:item.limiter.filter.parameters.clip_limit}[id];
         // Native blur can follow an explicit change on the same field. Never
         // start a second transaction for an already acknowledged value.
-        if (!pending && next === Number(current)) return;
+        const partner = id === 'gain' && gainLinked(channel) ? latest.ways.find(w => w.channel === gainPartner(channel)) : null;
+        if (!pending && next === Number(current) && (!partner || next === Number(partner.gain.filter.parameters.gain))) return;
         const method = {gain:'setGain', delay:'setDelay', phase:'setPhase', limiter:'setHardLimiter'}[id];
-        return run(() => service[method](channel, next), undefined, {queue:true,controls});
+        const linked = !!partner;
+        return run(() => linked ? service.setLinkedGain(channel, next) : service[method](channel, next), undefined, {queue:true,controls});
       }
       const edge = el.dataset.xoFamily || el.dataset.xoFreq || el.dataset.xoSlope || el.dataset.xoRange;
       if (edge) {
@@ -230,6 +243,14 @@
     });
     document.addEventListener('click', e => {
       const el = e.target.closest('button'); if (!el) return;
+      if (el.dataset.gainLink) {
+        if (busy) return;
+        const pair = el.dataset.gainLink;
+        gainLinks[pair] = !gainLinks[pair];
+        localStorage.setItem(`estack.control.link.${pair}`, String(gainLinks[pair]));
+        updateSelector();
+        return;
+      }
       if (el.dataset.wayChannel !== undefined) {
         if (activeRange) return;
         selectedChannel = Number(el.dataset.wayChannel); if (compareChannel === selectedChannel) compareChannel = null;

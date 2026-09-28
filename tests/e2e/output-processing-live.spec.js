@@ -73,6 +73,52 @@ for (const width of [390, 768, 1920]) {
   });
 }
 
+test('compact way rail follows the graph and Gain links remain pair-scoped', async ({ page, request }) => {
+  await requireDemoRuntime(request);
+  const original = await dspCommand('GetConfigJson');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/estack-dsp/?transport=camillanode#output-processing');
+  const frame = await outputFrame(page);
+  try {
+    const layout = await frame.evaluate(() => {
+      const graph = document.querySelector('.graph-wrap').getBoundingClientRect();
+      const rail = document.querySelector('.way-strip').getBoundingClientRect();
+      return { graphTop: graph.top, graphBottom: graph.bottom, railTop: rail.top, overflow: document.documentElement.scrollWidth > innerWidth };
+    });
+    expect(layout.graphTop).toBeLessThan(480);
+    expect(layout.railTop).toBeGreaterThanOrEqual(layout.graphBottom);
+    expect(layout.overflow).toBe(false);
+    await expect(frame.locator('[data-gain-link="mid"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(frame.locator('[data-gain-link="high"]')).toHaveAttribute('aria-pressed', 'true');
+    await frame.locator('#systemEdit').click();
+    await frame.locator('[data-way-channel="2"]').click();
+    await frame.locator('[data-value="gain"]').fill('-8.7');
+    await frame.locator('[data-value="gain"]').press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters.mid_l_gain.parameters.gain, config.filters.mid_r_gain.parameters.gain];
+    }).toEqual([-8.7, -8.7]);
+    const linked = await dspCommand('GetConfigJson');
+    const scoped = clone(linked);
+    scoped.filters.mid_l_gain.parameters.gain = original.filters.mid_l_gain.parameters.gain;
+    scoped.filters.mid_r_gain.parameters.gain = original.filters.mid_r_gain.parameters.gain;
+    expect(scoped).toEqual(original);
+    await frame.locator('[data-gain-link="mid"]').click();
+    await expect(frame.locator('[data-gain-link="mid"]')).toHaveAttribute('aria-pressed', 'false');
+    expect(await dspCommand('GetConfigJson')).toEqual(linked);
+    await frame.locator('[data-value="gain"]').fill('-8.6');
+    await frame.locator('[data-value="gain"]').press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters.mid_l_gain.parameters.gain, config.filters.mid_r_gain.parameters.gain];
+    }).toEqual([-8.6, -8.7]);
+  } finally {
+    const current = await dspCommand('GetConfigJson');
+    if (JSON.stringify(current) !== JSON.stringify(original)) await dspCommand({ SetConfigJson: JSON.stringify(original) });
+    expect(await dspCommand('GetConfigJson')).toEqual(original);
+  }
+});
+
 test.describe('Output Processing live CamillaNode demo', () => {
   test('round trips a shared MID crossover and a temporary MID L PEQ through the product', async ({ page, request }) => {
     await requireDemoRuntime(request); const original = await dspCommand('GetConfigJson');
@@ -307,9 +353,9 @@ test.describe('Output mobile touch', () => {
         const input=frame.locator('[data-value="gain"]');await input.fill(value);await input.press('Tab');await ready();
         await expect(input).toHaveValue(expected);
         expect((await dspCommand('GetConfigJson')).filters.mid_l_gain.parameters.gain).toBe(Number(expected));
-        await expect(frame.locator('[data-way-channel="2"] meter')).toHaveJSProperty('value',Number(expected));
-        await expect(frame.locator('[data-way-channel="2"] meter')).toHaveAttribute('min','-60');
-        await expect(frame.locator('[data-way-channel="2"] meter')).toHaveAttribute('max','6');
+        await expect(frame.locator('[data-way-channel="2"] .way-gain')).toHaveText(`${Number(expected)>0?'+':''}${expected.replace('-', '−')} dB`);
+        await expect(frame.locator('[data-range="gain"]')).toHaveAttribute('min','-60');
+        await expect(frame.locator('[data-range="gain"]')).toHaveAttribute('max','6');
       }
       await frame.locator('[data-polarity="true"]').tap();await ready();await expect(frame.locator('[data-polarity="true"]')).toHaveAttribute('aria-pressed','true');
       await frame.locator('[data-mute]').tap();await ready();await expect(frame.locator('#muteDetail')).toHaveText('MUTED');await expect(frame.locator('[data-mute]')).toHaveText('Unmute');

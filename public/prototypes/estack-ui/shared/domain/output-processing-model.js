@@ -128,6 +128,25 @@
     const value = after.filters[gain.name].parameters.gain;
     if (value !== gain.filter.parameters.gain && value !== normalizeGain(value)) throw new Error('Output Gain must be -60…+6 dB in 0.1 dB steps.');
   }
+  function assertLinkedGainMutation(before, after, channels, target) {
+    const pair = channels.map(Number);
+    if (fingerprint(pair) !== fingerprint([2, 3]) && fingerprint(pair) !== fingerprint([4, 5])) throw new Error('Only MID L/R and HIGH L/R may share a gain transaction.');
+    const entries = pair.map(channel => entryForType(before, channel, 'Gain'));
+    if (entries.some(entry => !entry)) throw new Error('Linked Gain anchor is missing.');
+    const names = entries.map(entry => entry.name);
+    if (new Set(names).size !== 2) throw new Error('Linked Gain anchors must be distinct.');
+    assertScoped(before, after, { filters: names });
+    for (const entry of entries) {
+      const oldFilter = clone(entry.filter);
+      const nextFilter = clone(after.filters?.[entry.name]);
+      if (!nextFilter || oldFilter.type !== 'Gain' || nextFilter.type !== 'Gain') throw new Error('Linked Gain identity changed unexpectedly.');
+      const actual = nextFilter.parameters?.gain;
+      if (actual !== normalizeGain(target)) throw new Error('Linked Gain readback differs from the requested value.');
+      delete oldFilter.parameters.gain;
+      delete nextFilter.parameters.gain;
+      if (fingerprint(oldFilter) !== fingerprint(nextFilter)) throw new Error('Linked Gain changed outside its permitted parameter.');
+    }
+  }
   function assertDelayMutation(before, after, channel) { const delay = entryForType(before, channel, 'Delay'); assertParamOnly(before, after, delay.name, 'Delay', ['delay']); }
   function protectionPair(config, channel) {
     const limiter = limiterEntry(config, channel);
@@ -187,5 +206,5 @@
     const xo = Object.values(data.crossover).reduce((sum, item) => sum + crossoverMagnitude(item?.filter, frequency), 0); const peq = data.peq.reduce((sum, item) => sum + (!item || disabled.has(item.slot) ? 0 : peqMagnitude(item.filter, frequency, config.devices?.samplerate)), 0);
     return xo + peq + Number(data.gain.filter.parameters?.gain || 0);
   }
-  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, protectionPair, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
+  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, protectionPair, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertLinkedGainMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
 })();
