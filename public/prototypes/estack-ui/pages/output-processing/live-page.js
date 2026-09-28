@@ -276,21 +276,32 @@
     if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
     const ctx = canvas.getContext('2d'), w = width / ratio, h = height / ratio;
     ctx.setTransform(ratio,0,0,ratio,0,0); ctx.clearRect(0,0,w,h);
-    const [fmin,fmax] = graphRange(), left = 45, right = 22, top = 17, bottom = 26, pw = w-left-right, ph = h-top-bottom;
+    const [fmin,fmax] = graphRange(), left = w < 600 ? 38 : 48, right = w < 600 ? 14 : 22, top = 25, bottom = 30, pw = w-left-right, ph = h-top-bottom;
     const phaseMode = graphMode !== 'magnitude', minY = phaseMode ? -180 : -72, maxY = phaseMode ? 180 : 18;
     const x = f => left + Math.log(f/fmin) / Math.log(fmax/fmin) * pw, y = v => top + (maxY-v)/(maxY-minY)*ph;
-    ctx.font = `${w<600?11:10}px ui-monospace,monospace`;
+    ctx.font = '11px ui-monospace,monospace';
     const segment = (x1,y1,x2,y2) => { ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); };
+    ctx.fillStyle = '#81979b'; ctx.textAlign = 'left';
+    ctx.fillText(phaseMode ? '°' : 'dB', 8, 14);
     (phaseMode ? [-180,-90,0,90,180] : [-60,-48,-36,-24,-12,0,12]).forEach(v => {
-      ctx.strokeStyle = v === 0 ? '#435c63' : '#203338'; ctx.lineWidth = 1; segment(left,y(v),w-right,y(v));
-      ctx.fillStyle = '#8fa5ab'; ctx.textAlign = 'right'; ctx.fillText(v, left-9,y(v)+3);
+      ctx.strokeStyle = v === 0 ? '#48666c' : '#20363a'; ctx.lineWidth = 1; segment(left,y(v),w-right,y(v));
+      ctx.fillStyle = v === 0 ? '#c2d5d7' : '#829fa3'; ctx.textAlign = 'right';
+      ctx.fillText(v > 0 && !phaseMode ? `+${v}` : String(v), left-9,y(v)+4);
     });
-    const ticks = w < 300 ? [20,100,1000,20000] : w < 600 ? [20,50,100,500,1000,5000,20000] : [20,30,50,80,100,200,500,1000,2000,5000,10000,20000];
-    ticks.filter(v => v >= fmin && v <= fmax).forEach(v => {
-      ctx.strokeStyle = [100,1000,10000].includes(v) ? '#2d4349' : '#192d32'; segment(x(v),top,x(v),h-bottom);
-      ctx.fillStyle='#8fa5ab'; ctx.textAlign='center'; ctx.fillText(v>=1000 ? `${v/1000}k` : v,x(v),h-8);
+    const ticks = w < 600 ? [20,50,100,500,1000,5000,20000] : [20,30,50,100,200,500,1000,2000,5000,10000,20000];
+    const visibleTicks = [...new Set([fmin,...ticks.filter(v => v > fmin && v < fmax),fmax])];
+    let lastLabelX = -Infinity;
+    visibleTicks.forEach((v,i) => {
+      const px = x(v), major = [100,1000,10000].includes(v);
+      ctx.strokeStyle = major ? '#2b464a' : '#1b3034'; segment(px,top,px,h-bottom);
+      const isEdge = i === 0 || i === visibleTicks.length - 1;
+      const labelSpacing = w < 600 ? 31 : 38;
+      if (!isEdge && (px - lastLabelX < labelSpacing || x(fmax) - px < labelSpacing)) return;
+      ctx.fillStyle = major ? '#a4b9bc' : '#839ea2';
+      ctx.textAlign = i === 0 ? 'left' : i === visibleTicks.length - 1 ? 'right' : 'center';
+      ctx.fillText(v >= 1000 ? `${Number((v/1000).toFixed(1))}k` : String(Math.round(v)),px,h-8);
+      lastLabelX = px;
     });
-    ctx.textAlign='left'; ctx.fillStyle='#708b92'; ctx.font='9px ui-monospace,monospace'; ctx.fillText(phaseMode?'deg':'dB',8,9);
     const item = selected();
     text('#edgeContext', ['hpf','lpf'].map(edge => `${edge.toUpperCase()} ${item.crossover[edge] ? hz(item.crossover[edge].filter.parameters.freq) : '—'}`).join('  /  '));
     ctx.save(); ctx.beginPath(); ctx.rect(left,top,pw,ph); ctx.clip();

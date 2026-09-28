@@ -40,6 +40,17 @@ for (const width of [390, 768, 1920]) {
     await page.goto('/estack-dsp/?transport=camillanode#output-processing');
     const frame = await outputFrame(page);
     await expect(frame.locator('.way-card')).toHaveCount(6);
+    const layout = await frame.evaluate(() => {
+      const page = document.querySelector('.output-page').getBoundingClientRect();
+      const plot = document.querySelector('.graph-wrap').getBoundingClientRect();
+      return { pageLeft: page.left, pageWidth: page.width, plotHeight: plot.height, overflow: document.documentElement.scrollWidth > innerWidth };
+    });
+    expect(layout.overflow).toBe(false);
+    expect(layout.plotHeight).toBeGreaterThanOrEqual(250);
+    if (width === 1920) {
+      expect(layout.pageWidth).toBeLessThanOrEqual(1600);
+      expect(layout.pageLeft).toBeGreaterThanOrEqual(150);
+    }
     const positions = () => frame.evaluate(() => ['.graph-wrap', '.output-section'].map(selector => {
       const rect = document.querySelector(selector).getBoundingClientRect();
       return { top: rect.top + scrollY, height: rect.height };
