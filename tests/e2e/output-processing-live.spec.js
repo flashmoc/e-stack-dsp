@@ -48,8 +48,8 @@ for (const width of [390, 768, 1920]) {
     expect(layout.overflow).toBe(false);
     expect(layout.plotHeight).toBeGreaterThanOrEqual(250);
     if (width === 1920) {
-      expect(layout.pageWidth).toBeLessThanOrEqual(1600);
-      expect(layout.pageLeft).toBeGreaterThanOrEqual(150);
+      expect(layout.pageWidth).toBeLessThanOrEqual(1800);
+      expect(layout.pageLeft).toBeGreaterThanOrEqual(50);
     }
     const positions = () => frame.evaluate(() => ['.graph-wrap', '.output-section'].map(selector => {
       const rect = document.querySelector(selector).getBoundingClientRect();

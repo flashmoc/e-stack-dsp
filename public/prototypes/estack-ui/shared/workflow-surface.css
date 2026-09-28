@@ -8,12 +8,13 @@
   display: none !important;
 }
 .product-surface {
-  max-width: 1600px;
+  width: 100%;
+  max-width: 1800px;
   margin: auto;
-  padding: 24px;
+  padding: 16px 22px 20px;
   display: grid;
-  gap: 20px;
-  font-size: 14px;
+  gap: 12px;
+  font-size: 13px;
 }
 .surface-heading,
 .surface-actions {
@@ -23,6 +24,24 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+.surface-heading > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.surface-heading > div:first-child h1 { order: 0; }
+.surface-heading > div:first-child .eyebrow {
+  order: 1;
+  margin: 0;
+  padding-left: 12px;
+  border-left: 1px solid #294348;
+  color: #8fa8ad;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
 h1,
 h2,
 h3,
@@ -30,8 +49,8 @@ p {
   margin: 0;
 }
 h1 {
-  font-size: 26px;
-  letter-spacing: -0.04em;
+  font-size: 20px;
+  letter-spacing: -0.035em;
 }
 h2 {
   font-size: 16px;
@@ -257,8 +276,9 @@ html[data-contrast="high"] .product-surface :is(.muted, small, label, dt) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .surface-heading h1 {
-    font-size: 22px;
+    font-size: 18px;
   }
+  .surface-heading > div:first-child .eyebrow { display: none; }
   .surface-metrics {
     grid-template-columns: 1fr 1fr;
   }

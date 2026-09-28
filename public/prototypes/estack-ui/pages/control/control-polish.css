@@ -36,12 +36,19 @@
 }
 #inputTrimValue[hidden] { display: none; }
 .control-page { max-width:1800px; width:100%; margin-inline:auto; }
+.control-page { padding:16px 22px 20px; }
+.control-heading { display:flex; align-items:center; gap:12px; min-height:36px; }
+.control-heading h1 { margin:0; font-size:20px; letter-spacing:-.035em; }
+.control-heading span { padding-left:12px; border-left:1px solid var(--color-border-subtle); color:var(--color-muted); font-size:11px; }
 .control-page .channel-pair { padding-bottom:0; align-items:stretch; }
 .control-page .channel-pair .mixer-strip { padding-bottom:16px; }
 .control-page .pair-link { position:static; transform:none; grid-column:1/-1; justify-self:stretch; width:auto; margin:8px 12px 12px; min-height:44px; background:var(--color-control); font-size:11px; }
 .control-page .channel-pair { border-radius:6px; overflow:hidden; }
 .control-page .mixer-strip { border-radius:5px; }
 @media(max-width:700px) {
+  .control-page { padding:10px 12px 20px; }
+  .control-heading h1 { font-size:18px; }
+  .control-heading span { display:none; }
   .control-page .console-bank { gap:12px; }
   .control-page .channel-pair { gap:0; }
   .control-page .mixer-actions { padding:12px; }

@@ -28,8 +28,8 @@
 [hidden] { display:none !important; }
 @media(max-width:700px) {
   .surface-heading { display:flex; align-items:center; gap:12px; }
-  .surface-heading .surface-actions { display:flex; flex-direction:column; align-items:end; gap:4px; }
-  .surface-heading .surface-actions button { min-width:100px; }
+  .surface-heading .surface-actions { display:flex; flex-direction:row; align-items:center; gap:8px; }
+  .surface-heading .surface-actions button { flex:none; min-width:0; min-height:44px; }
   .surface-heading .eyebrow { display:none; }
   .advanced-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
   .advanced-tabs button { padding:10px 3px; font-size:12px; }

@@ -72,8 +72,10 @@ for (const width of [1440, 1024, 390]) test(`Advanced shows ordered per-output p
   }
   await f.locator('#pathOutput').selectOption(width===390?'0':'all');
   await f.locator('#pipelineEditor').screenshot({path:`test-results/advanced-paths-${width}.png`});
-  const firstComponent = await f.locator('.signal-path').first().locator('.path-component').first().textContent();
-  await f.locator('.signal-path').first().locator('.path-component').first().click();
+  const filterComponent = f.locator('.signal-path').first().locator('.path-step:not(.path-mixer) .path-component').first();
+  const firstComponent = await filterComponent.textContent();
+  expect(Object.keys(config.filters)).toContain(firstComponent);
+  await filterComponent.click();
   await expect(f.locator('[data-kind="filters"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(f.locator('#component')).toHaveValue(firstComponent);
   await f.locator('[data-kind="mixers"]').click();

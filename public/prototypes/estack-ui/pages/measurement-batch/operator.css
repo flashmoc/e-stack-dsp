@@ -18,11 +18,17 @@
   .measurement-page .batch-actions button { flex:1 1 auto; }
 }
 .measurement-page {
-  max-width: 1600px;
+  width: 100%;
+  max-width: 1800px;
   margin: auto;
-  padding: 24px;
-  gap: 18px;
+  padding: 16px 22px 20px;
+  gap: 12px;
 }
+.measurement-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; min-height:36px; }
+.measurement-heading>div:first-child { display:flex; align-items:center; gap:12px; min-width:0; }
+.measurement-heading h1 { margin:0; font-size:20px; letter-spacing:-.035em; }
+.measurement-heading>div:first-child span { padding-left:12px; border-left:1px solid var(--color-border-subtle); color:var(--color-muted); font-size:11px; }
+.measurement-heading .measurement-context { justify-content:flex-end; }
 .measurement-page .ui-panel {
   border-radius: 8px;
 }
@@ -82,6 +88,8 @@ html[data-contrast="high"] .measurement-page .ui-panel {
     padding: 12px;
     gap: 12px;
   }
+  .measurement-heading h1 { font-size:18px; }
+  .measurement-heading>div:first-child span { display:none; }
   .measurement-page .measurement-workspace {
     grid-template-columns: 1fr;
   }
