@@ -105,7 +105,7 @@
     return snapshot();
   }
   function stopTelemetry() { if (telemetryTimer) clearInterval(telemetryTimer); telemetryTimer = null; }
-  async function setMaster(value) { const next = Math.round(clamp(value, -50, 0) / .5) * .5; await command({ SetVolume: next }); state.master = next; state.heldPeaks.clear(); emit(); return next; }
+  async function setMaster(value) { const next = Math.round(clamp(value, -60, 0) / .5) * .5; await command({ SetVolume: next }); state.master = next; state.heldPeaks.clear(); emit(); return next; }
   function setLink(key, value) { if (!M.LINK_DEFINITIONS[key]) throw new Error('Unknown linked pair'); state.links[key] = !!value; saveLink(key, value); emit(); }
 
   async function mutateWay(channel, change, targetChannels = null) {

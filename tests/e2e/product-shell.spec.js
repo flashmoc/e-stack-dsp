@@ -27,6 +27,15 @@ for (const width of [390, 1440])
       /Design System|Prototype|MOCK/i,
     );
     await expect(page.locator(".environment-banner")).toBeHidden();
+    const guiLink = page.locator(width === 390 ? '.shell-mobile-nav [data-camillagui]' : '.shell-nav [data-camillagui]');
+    await expect(guiLink).toBeVisible();
+    await expect(guiLink).toHaveAttribute('href', `${new URL('/camillagui/gui/index.html', page.url()).href}`);
+    await expect(guiLink).toHaveAttribute('target', '_blank');
+    await page.screenshot({path:`test-results/product-shell-gui-${width}.png`});
+    const [guiPage] = await Promise.all([page.waitForEvent('popup'), guiLink.click()]);
+    await guiPage.waitForLoadState('domcontentloaded');
+    expect(guiPage.url()).toContain('/camillagui/gui/index.html');
+    await guiPage.close();
     const shell = await page.locator(".shell-health").elementHandle();
     for (const route of routes) {
       if (width === 390)

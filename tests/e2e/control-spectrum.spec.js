@@ -1,0 +1,23 @@
+const {test,expect}=require('@playwright/test');
+const {demo,frame}=require('./batch-helpers');
+for(const width of [1440,390]) test('Control spectrum responsive '+width,async({page,request})=>{
+ await demo(request);
+ await page.setViewportSize({width,height:900});
+ const f=await frame(page,'control');
+ await expect(f.locator('#protectionSummary [data-normalize]')).toBeVisible();
+ await expect(f.locator('#protectionSummary [data-level-lock]')).toBeVisible();
+ await expect(f.locator('#mixerActions')).toBeHidden();
+ const canvas=f.locator('#inputScope');
+ expect(await f.evaluate(() => document.querySelector('.control-mixer').getBoundingClientRect().bottom <= document.querySelector('#inputTrim').getBoundingClientRect().top)).toBe(true);
+ await expect(canvas).toBeVisible();
+ await expect.poll(()=>canvas.evaluate(c=>c.width===Math.round(c.getBoundingClientRect().width*devicePixelRatio))).toBe(true);
+ await canvas.scrollIntoViewIfNeeded();
+ await page.screenshot({path:'test-results/spectrum-'+width+'.png'});
+ await f.locator('#protectionSummary').scrollIntoViewIfNeeded();
+ await page.screenshot({path:'test-results/control-summary-'+width+'.png'});
+ await f.locator('#analyzerToggle').uncheck();
+ await expect(canvas).toBeHidden();
+ await f.locator('#analyzerToggle').check();
+ await expect(canvas).toBeVisible();
+ expect(await f.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

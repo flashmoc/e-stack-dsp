@@ -53,6 +53,10 @@
   }
 
   window.EStackControlFaderPresentation = Object.freeze({
+    // Live console: the meter, scale and gain handle share one dB axis.
+    // Gain uses -60..max; measured signal always uses -60..0 dBFS.
+    axisPosition: (value, max) => 100 * (max - clamp(value, -60, max)) / (max + 60),
+    axisValue: (position, min, max) => clamp(max - clamp(position, 0, 100) * (max + 60) / 100, min, max),
     outputStops,
     positionPercent,
     valueAtPosition,

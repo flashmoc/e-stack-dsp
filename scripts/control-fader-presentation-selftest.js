@@ -14,6 +14,16 @@ vm.runInNewContext(fs.readFileSync(helperPath, 'utf8'), context, { filename: hel
 const fader = context.window.EStackControlFaderPresentation;
 
 assert.ok(fader, 'Control fader presentation helper was not loaded');
+for (const max of [0, 6]) {
+  for (const value of [-60, -48, -36, -24, -12, 0, max]) {
+    const position = fader.axisPosition(value, max);
+    assert(Math.abs(fader.axisValue(position, -60, max) - value) < 1e-9);
+    assert(Math.abs(position - (max - value) / (max + 60) * 100) < 1e-9);
+  }
+  assert.equal(fader.axisPosition(max, max), 0, 'top gain must reach the top');
+  assert.equal(fader.axisPosition(-60, max), 100);
+}
+assert.equal(fader.axisValue(100, -60, 0), -60, 'Master reaches -60 dB');
 for (const [value, position] of [[6, 4], [0, 18], [-12, 42], [-30, 68], [-60, 100]]) {
   assert.strictEqual(fader.positionPercent(value, -60, 6), position, `output fader anchor ${value} dB is wrong`);
   assert.strictEqual(fader.valueAtPosition(position, -60, 6), value, `output fader inverse anchor ${position}% is wrong`);

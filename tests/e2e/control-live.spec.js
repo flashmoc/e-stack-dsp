@@ -79,7 +79,7 @@ function assertOnlySubGainChanged(before, after, targetGain) {
 async function setSubGainThroughFader(frame, targetGain) {
     const core = frame.locator('[data-fader-core="0"]');
     await expect(core).toBeVisible();
-    const position = await frame.evaluate(value => window.EStackControlFaderPresentation.positionPercent(value, -60, 6), targetGain);
+    const position = (6 - targetGain) / 66 * 100;
     const box = await core.boundingBox();
     if (!box) throw new Error('SUB fader is not measurable.');
     await core.click({ position: { x: box.width / 2, y: box.height * position / 100 } });
@@ -217,4 +217,26 @@ test.describe('Control live CamillaNode demo', () => {
             }, { key: LEVEL_LOCK_STORAGE_KEY, value: previousLock });
         }
     });
+});
+
+test('Master reaches -60 dB without changing processing or mute', async ({page,request}) => {
+    await requireDemoRuntime(request);
+    const config = await dspCommand('GetConfigJson');
+    const volume = await dspCommand('GetVolume');
+    const mute = await dspCommand('GetMute');
+    try {
+        await page.goto('/estack-dsp/?transport=camillanode#control');
+        const frame = await controlFrame(page);
+        const input = frame.locator('[data-number="master"]');
+        await expect(input).toBeEnabled();
+        await input.fill('-60');
+        await input.press('Tab');
+        await expect.poll(() => dspCommand('GetVolume')).toBe(-60);
+        await expect(frame.locator('[data-fader="master"]')).toHaveValue('-60');
+        expect(await dspCommand('GetConfigJson')).toEqual(config);
+        expect(await dspCommand('GetMute')).toBe(mute);
+    } finally {
+        await dspCommand({SetVolume:volume});
+        expect(await dspCommand('GetVolume')).toBe(volume);
+    }
 });

@@ -7,17 +7,27 @@
 #controlStatus { min-height:18px; color:var(--color-muted); font-size:11px; padding:0 4px; }
 #controlStatus[data-state=error] { color:var(--color-critical); }
 .control-page .protection-summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.control-page .protection-summary[data-layout="compact"] { grid-template-columns:repeat(4,minmax(0,1fr)) minmax(128px,auto) minmax(110px,auto); }
+.control-page .protection-summary[data-layout="compact"]>button { min-height:52px; padding:8px 12px; font-size:10px; white-space:nowrap; }
+.control-page .protection-summary[data-layout="compact"]>button:focus-visible { outline:2px solid var(--color-accent); outline-offset:-3px; }
+.control-page .mixer-actions[hidden] { display:none; }
 .mixer-actions { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--color-border-subtle); }
 .mixer-actions>div { display:grid; gap:3px; margin-right:auto; }.mixer-actions strong { font-size:13px; }.mixer-actions>div>span { font-size:10px; color:var(--color-muted); }
 .control-page .mixer-actions button { min-height:44px; padding:8px 12px; border:1px solid var(--color-border-subtle); border-radius:5px; font-size:11px; }
 .protection-load[data-load-state=ok] strong { color:var(--color-success); }.protection-load[data-load-state=warning] strong { color:var(--color-warning); }.protection-load[data-load-state=critical] strong { color:var(--color-critical); }
 .protection-load[data-load-state] b { background:var(--color-success); }.protection-load[data-load-state=warning] b { background:var(--color-warning); }.protection-load[data-load-state=critical] b { background:var(--color-critical); }
+@media(max-width:1100px) and (min-width:701px) {
+  .control-page .protection-summary[data-layout="compact"] { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
 @media(max-width:700px) {
   .control-page .input-trim-control { grid-template-columns:44px minmax(0,1fr) 44px; gap:6px 10px; }
   .input-trim-control>label { grid-column:1/-1; grid-row:2; }
   .input-trim-control>.trim-value { grid-column:2; grid-row:1; justify-self:center; width:130px; }
   #inputTrimDown { grid-column:1; grid-row:1; }#inputTrimUp { grid-column:3; grid-row:1; }
   .control-page .protection-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .control-page .protection-summary[data-layout="compact"] { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .control-page .protection-summary[data-layout="compact"]>button { min-height:48px; }
+  .control-page .protection-summary[data-layout="compact"]>.level-lock { grid-column:auto; }
   .control-page .mixer-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .mixer-actions>div { grid-column:1/-1; }
   .control-page .mixer-actions .level-lock { grid-column:auto; }
@@ -38,3 +48,74 @@
 }
 
 @media(min-width:1101px) { .control-page .console-bank>.mixer-strip { padding-bottom:82px; } }
+
+/* Independent scales: measured level (-60..0 dBFS) and adjustable gain. */
+.control-page .calibrated-meter {
+  height:296px;
+  padding-top:35px;
+  margin-top:10px;
+  background:#081214;
+  border-color:#263d42;
+  box-shadow:none;
+}
+.calibrated-meter .legacy-dbfs-scale::before { content:"LEVEL"; top:-30px; font-size:9px; white-space:nowrap; }
+.calibrated-meter .legacy-gain-scale::before { content:"GAIN"; top:-30px; font-size:9px; white-space:nowrap; }
+.calibrated-meter .legacy-dbfs-scale,
+.calibrated-meter .legacy-gain-scale { color:#a3bbc0; font-size:9px; }
+.calibrated-meter .legacy-meter-track {
+  left:0;
+  top:0;
+  width:16px;
+  height:100%;
+  border:0;
+  border-radius:0;
+  background:#14282c;
+  box-shadow:none;
+}
+.calibrated-meter .legacy-meter-fill {
+  left:0; right:0; bottom:0; height:100%;
+  border-radius:0; opacity:1; box-shadow:none;
+  background:linear-gradient(to top,#49cb8b 0 80%,#edba54 80% 95%,#ec7077 95% 100%);
+  transition:clip-path 80ms linear;
+}
+.master-strip .calibrated-meter .legacy-meter-fill {
+  background:linear-gradient(to top,#49cb8b 0 80%,#edba54 80% 95%,#ec7077 95% 100%);
+}
+.calibrated-meter .legacy-meter-peak {
+  left:0; right:0; bottom:auto;
+  height:1px; transform:translateY(-1px);
+  background:#e9ffff; box-shadow:none;
+  transition:top 80ms linear;
+}
+.calibrated-meter .legacy-gain-rail {
+  left:36px; top:0; bottom:0; width:3px;
+  background:#446067; box-shadow:none;
+}
+
+.calibrated-meter .legacy-fader-handle {
+  left:36px; width:24px; height:10px;
+  border:1px solid #d6eaed; border-radius:3px;
+  background:#bed2d6; box-shadow:0 1px 3px #0009;
+}
+.calibrated-meter .legacy-fader-handle::after { left:4px; right:4px; height:2px; }
+.calibrated-meter .gain-tick { font-size:9px; }
+.calibrated-meter .gain-tick.unity { padding:0; margin-left:0; background:none; }
+.calibrated-meter .legacy-gain-scale span::before { background:#546f76; }
+.calibrated-meter .legacy-meter-core:focus-visible { outline:1px solid var(--way); outline-offset:4px; }
+@media(prefers-reduced-motion:reduce) {
+  .calibrated-meter .legacy-meter-fill,.calibrated-meter .legacy-meter-peak { transition:none; }
+}
+
+.calibrated-meter .legacy-dbfs-scale::after { content:"dBFS"; position:absolute; right:0; top:-19px; font-size:8px; color:#78969d; }
+
+.calibrated-meter .legacy-gain-scale::after { content:"dB"; position:absolute; right:0; top:-19px; font-size:8px; color:#78969d; }
+
+/* Real spectrum: crisp canvas backing pixels and deliberately sparse axes. */
+.control-page #inputScope {
+  display:block; width:100%; min-width:0; height:210px; margin:0;
+  border:1px solid #29414a; border-radius:8px; box-sizing:border-box;
+}
+.control-page #inputScope[hidden] { display:none; }
+@media(max-width:700px) {
+  .control-page #inputScope { height:220px; width:calc(100% - 24px); margin:12px; }
+}

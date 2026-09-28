@@ -9,6 +9,15 @@
   mobileNav.innerHTML = '<label for="mobilePageSelect">PAGE</label><select id="mobilePageSelect" aria-label="Choose workspace"></select>';
   document.querySelector('.shell-nav').before(mobileNav);
   const select = mobileNav.querySelector('select');
+  const mobileGuiLink = document.createElement('a');
+  mobileGuiLink.className = 'shell-gui-link';
+  mobileGuiLink.dataset.camillagui = '';
+  mobileGuiLink.hidden = true;
+  mobileGuiLink.target = '_blank';
+  mobileGuiLink.rel = 'noopener noreferrer';
+  mobileGuiLink.setAttribute('aria-label', 'Open CamillaGUI in a new tab');
+  mobileGuiLink.textContent = 'CamillaGUI ↗';
+  mobileNav.append(mobileGuiLink);
   const groups = new Map();
   for (const link of links) {
     const label = link.dataset.group;
@@ -52,6 +61,26 @@
   if (!live) {
     document.querySelector('.environment-banner').hidden = false;
     const script = document.createElement('script'); script.src = './shared/preview-shell.js'; document.head.append(script);
+  }
+  if (live) {
+    window.EStackDSPBridge.api('/api/runtime').then(runtime => {
+      let target = null;
+      if (typeof runtime.camillaGuiProxy === 'string' && runtime.camillaGuiProxy.startsWith('/camillagui/')) {
+        target = new URL(runtime.camillaGuiProxy, location.origin);
+      } else if (runtime.mode === 'hardware') {
+        target = new URL(location.href);
+        target.protocol = 'http:';
+        target.port = '5005';
+        target.pathname = '/gui/index.html';
+        target.search = '';
+        target.hash = '';
+      }
+      if (!target) return;
+      document.querySelectorAll('[data-camillagui]').forEach(link => {
+        link.href = target.href;
+        link.hidden = false;
+      });
+    }).catch(() => {});
   }
   choose(location.hash.slice(1));
 })();

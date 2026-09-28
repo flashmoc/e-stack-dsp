@@ -1,8 +1,21 @@
 # Control
 
+Live strips separate measured LEVEL (−60…0 dBFS on every output and Master)
+from adjustable GAIN (−60…0 dB for Master, −60…+6 dB for ways). No grid line
+connects the two scales. The Master control now reaches −60 dB, with its existing
+0.5 dB steps and dedicated SetVolume path; mute remains independent.
+Signal colors change at fixed −12/−3 dBFS thresholds. The Master meter shows the
+loudest unmuted output peak, explicitly labelled LOUDEST OUTPUT.
+
 Master now exposes native DSP mute (GetMute/SetMute with readback), independent
 of Level Lock and without changing volume or way gains. Muted ways show no
 limiter event. Missing/silent peak margins are not compared as numeric zero.
+
+The input spectrum is a text-free segmented-bar visualizer using real stereo
+band peaks from the spectrum proxy. Its fixed vertical blue/cyan/green gradient
+follows the original presentation. Canvas resolution follows actual size and
+pixel ratio. Missing or invalid telemetry clears the bars instead of retaining
+stale data. No labels, axes or status text are drawn inside the visualizer.
 
 ## Status
 
