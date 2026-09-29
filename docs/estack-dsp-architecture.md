@@ -77,7 +77,7 @@ capability belongs in the product page plus a reusable domain/service layer.
 - **Loudness, Signal Generator, Measurement Batch:** live server-owned workflows;
   software validation only, hardware acceptance remains separate.
 - **Connections:** read-only live runtime/DSP/spectrum diagnostics.
-- **Preferences:** browser-local density and contrast consumed by the secondary workflow pages, System Presets and Advanced.
+- **Preferences:** browser-local appearance and default page consumed by the shell and current workspace; no DSP ownership.
 - **System Presets/Startup:** server-owned capture, verified apply, protected deletion and boot selection.
 - **Advanced:** structured expert controls backed by a revision-checked server transaction; secondary topology/ownership inspector.
 - **Legacy frontend:** retained as behavioral reference until each capability

@@ -42,3 +42,48 @@
   --focus-ring: 0 0 0 3px rgba(89,213,227,.34);
   --shadow-raised: 0 8px 24px rgba(0,0,0,.24);
 }
+
+html[data-background="midnight"] {
+  --color-canvas: #0a1220;
+  --color-surface-1: #111e30;
+  --color-surface-2: #19293d;
+  --color-surface-raised: #203349;
+  --color-control: #080f1b;
+}
+html[data-background="slate"] {
+  --color-canvas: #171b1f;
+  --color-surface-1: #232a30;
+  --color-surface-2: #2b353c;
+  --color-surface-raised: #344149;
+  --color-control: #111619;
+}
+html[data-background="warm"] {
+  --color-canvas: #181613;
+  --color-surface-1: #26221c;
+  --color-surface-2: #312b23;
+  --color-surface-raised: #3a3329;
+  --color-control: #100f0d;
+}
+html[data-accent="mint"] { --color-accent: #70dfad; --focus-ring: 0 0 0 3px rgba(112,223,173,.34); }
+html[data-accent="amber"] { --color-accent: #e8ba68; --focus-ring: 0 0 0 3px rgba(232,186,104,.34); }
+html[data-accent="violet"] { --color-accent: #b5a0ec; --focus-ring: 0 0 0 3px rgba(181,160,236,.34); }
+html[data-corners="crisp"] { --radius-sm: 1px; --radius-md: 2px; }
+
+html[data-background]:not([data-background="graphite"]) body { background: var(--color-canvas); }
+html[data-background]:not([data-background="graphite"]) .product-surface :is(section, .surface-card) { background: var(--color-surface-1); }
+html[data-background]:not([data-background="graphite"]) .output-page {
+  --surface: var(--color-surface-1);
+  --deep: var(--color-control);
+  --line: var(--color-border-subtle);
+}
+html[data-background]:not([data-background="graphite"]) :is(.way-strip, .protection-rail) { background: var(--color-control); }
+html[data-accent]:not([data-accent="cyan"]) .output-page { --accent: var(--color-accent); }
+html[data-accent]:not([data-accent="cyan"]) .product-surface button[aria-pressed="true"]:not(.theme-swatch, .accent-swatch) {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 2px var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-1));
+}
+html[data-accent]:not([data-accent="cyan"]) .product-surface button.primary { border-color: var(--color-accent); }
+html[data-corners="crisp"] :is(.product-surface section, .surface-card, .ui-panel, .graph-section, .processor-section, button, input[type="number"], input[type="text"], select) {
+  border-radius: 2px;
+}

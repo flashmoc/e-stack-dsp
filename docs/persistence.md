@@ -33,7 +33,8 @@ state and must never be treated as the live source of truth. Current examples:
 - `estack.control.link.high`
 - historical local saved-config UI cache keys such as `savedConfigs`
 
-The MID/HIGH keys control linked **gain** interaction only. They do not persist
+The MID/HIGH keys control pair interaction in Control (Gain) and Output
+Processing (Gain, Delay, phase trim, crossovers and PEQ). They do not persist
 or imply a DSP mute state.
 
 ## Raspberry runtime state outside source control
@@ -50,9 +51,11 @@ server APIs only for their designated preset/configuration workflows. Do not
 invent a browser persistence format for processing, limiter, mixer or device
 state.
 
-Product workflow display preferences use estack.product.presentation (density
-and contrast). They are consumed only as CSS presentation by the secondary
-workflow surfaces, System Presets and Advanced; they never represent processing or safety state.
+Product display preferences use `estack.product.presentation`: density,
+contrast, dark background palette, accent color, corner style and default
+page. The shared appearance reader validates stored values and applies them
+to the shell and workspace. The default page is used only when the URL has no
+explicit page hash. These values never represent processing or safety state.
 
 ## Atomic system persistence
 

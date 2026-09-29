@@ -24,7 +24,7 @@ EStackDSPBridge exclusively; WS means its same-origin /ws/dsp proxy.
 | Measurement Batch | server/measurementBatch | /api/measurement-batch/status, baseline | import/start/next/previous/retry/goto/abort/clear | Batch + exact temporary baseline/session | Pending |
 | System Presets | server/startupConfiguration | /api/system-presets | capture/apply/rename/delete | Mixed savedConfigs.dat; estack-system v1 | Pending |
 | Startup Configuration | server/startupConfiguration | /api/startup-config | POST mode/target; server boot recall | startupConfig.json | Pending |
-| Preferences | Browser presentation only | localStorage | Density/contrast key only | estack.product.presentation | Browser-only; no hardware state |
+| Preferences | Browser presentation only | localStorage | Appearance and default-page key only | estack.product.presentation | Browser-only; no hardware state |
 | Connections | Read-only product diagnostics | /api/runtime; WS GetConfigJson; /ws/spectrum GetState | None | None | Pending |
 | Advanced | Server typed expert processing operations | GET /api/advanced | POST /api/advanced/edit | Live DSP; explicit system snapshot to save | New capability pending |
 

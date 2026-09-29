@@ -2,6 +2,8 @@
   'use strict';
   const links = [...document.querySelectorAll('[data-page]')];
   const frame = document.querySelector('#pageFrame');
+  const appearance = window.EStackAppearance;
+  appearance.apply(document);
   const live = new URLSearchParams(location.search).get('transport') === 'camillanode';
   document.documentElement.dataset.transport = live ? 'live' : 'preview';
   const mobileNav = document.createElement('div');
@@ -26,7 +28,7 @@
   }
   const routes = Object.fromEntries(links.map(link => {
     const url = new URL(link.href);
-    url.searchParams.set('v', 'software-release1');
+    url.searchParams.set('v', 'appearance1');
     if (live) url.searchParams.set('transport', 'camillanode');
     return [link.dataset.page, url.href];
   }));
@@ -49,7 +51,13 @@
     });
   }
   new ResizeObserver(refreshFrameLayout).observe(frame);
-  frame.addEventListener('load', refreshFrameLayout);
+  function refreshAppearance() {
+    const settings = appearance.read();
+    appearance.apply(document, settings);
+    if (frame.contentDocument?.documentElement) appearance.apply(frame.contentDocument, settings);
+  }
+  frame.addEventListener('load', () => { refreshAppearance(); refreshFrameLayout(); });
+  addEventListener('storage', event => { if (event.key === appearance.KEY) refreshAppearance(); });
   addEventListener('resize', refreshFrameLayout);
   links.forEach(link => link.addEventListener('click', event => { event.preventDefault(); choose(link.dataset.page); }));
   select.addEventListener('change', () => choose(select.value));
@@ -57,6 +65,7 @@
   addEventListener('message', event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
     if (event.data?.type === 'estack-navigate' && routes[event.data.page]) choose(event.data.page);
+    if (event.data?.type === 'estack-appearance-changed') refreshAppearance();
   });
   if (!live) {
     document.querySelector('.environment-banner').hidden = false;
@@ -82,5 +91,5 @@
       });
     }).catch(() => {});
   }
-  choose(location.hash.slice(1));
+  choose(location.hash.slice(1) || appearance.read().homePage);
 })();

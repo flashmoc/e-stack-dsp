@@ -1,14 +1,22 @@
 # Preferences
 
-Browser-only product preferences live at estack.product.presentation in
-localStorage: density (comfortable/compact) and contrast (standard/high).
-The shared product-surface.js reader consumes them on page load and storage
-updates. workflow-surface.css applies them to Loudness, Signal Generator,
-Connections, System Presets, Advanced and Preferences; Measurement Batch uses operator.css.
-Existing Control/Input/Output behavior and preferences are untouched.
+Browser-only product preferences live at `estack.product.presentation` in
+localStorage. They include density (comfortable/compact), contrast
+(standard/high), background palette (graphite/midnight/slate/warm), accent
+(cyan/mint/amber/violet), corner style (soft/crisp), and default page.
+`shared/appearance.js` validates stored values and applies appearance to the
+shell and the currently loaded same-origin workspace. The Preferences page
+notifies the shell after same-tab changes; other tabs use the storage event.
+The existing product-surface density/contrast rules continue to apply.
 
-No graph/meter/confirmation switches without an implemented consumer are
-exposed. These settings never enter DSP configurations, server presets or
-safety workflows. Reset removes only this browser presentation key.
+The default page is selected only when `/estack-dsp/` opens without a hash.
+An explicit `#page` route takes precedence, so bookmarks keep their target.
+The page choice does not change during navigation, and resetting preferences
+returns it to Control.
+
+Background palettes remain dark to preserve the readability of level and
+protection states. These settings never enter DSP configurations, server
+presets or safety workflows. Reset removes only this browser presentation key.
 There is no EStackPrototypeDSP dependency in either transport mode.
-E2E verifies persistence and the resulting computed layout/contrast on Connections.
+E2E verifies visible shell/workspace colors, layout and contrast, route
+precedence, persistence, and reset.

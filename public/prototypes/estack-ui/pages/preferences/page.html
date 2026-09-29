@@ -3,84 +3,56 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'"
-    />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'" />
     <title>Preferences — E-Stack DSP</title>
-    <link rel="stylesheet" href="../../shared/tokens.css" />
+    <link rel="stylesheet" href="../../shared/tokens.css?v=appearance1" />
     <link rel="stylesheet" href="../../shared/base.css" />
     <link rel="stylesheet" href="../../shared/workflow-surface.css?v=workspace-layout1" />
-    <link rel="stylesheet" href="./page.css?v=live-batch1" />
+    <link rel="stylesheet" href="./page.css?v=appearance1" />
   </head>
   <body>
-    <main class="product-surface" data-page="preferences">
+    <main class="product-surface preferences-page" data-page="preferences">
       <header class="surface-heading">
-        <div>
-          <p class="eyebrow">This browser</p>
-          <h1>Preferences</h1>
-        </div>
-        <output id="state" role="status">Connecting…</output>
+        <div><h1>Preferences</h1><p class="eyebrow">This browser</p></div>
+        <output id="state" role="status">Saved locally</output>
       </header>
-      <section>
-        <header>
-          <h2>Workspace presentation</h2>
-          <p class="muted">
-            Saved in this browser. Applies to Loudness, Signal Generator,
-            Measurement Batch, Connections, System Presets, Advanced and Preferences.
-          </p>
-        </header>
-        <label class="toggle-row"
-          ><span
-            ><strong>Information density</strong><br /><small
-              >Adjust spacing without shrinking touch targets.</small
-            ></span
-          ><select id="density">
-            <option value="comfortable">Comfortable</option>
-            <option value="compact">Compact</option>
-          </select></label
-        ><label class="toggle-row"
-          ><span
-            ><strong>Control contrast</strong><br /><small
-              >Stronger outlines and clearer secondary labels.</small
-            ></span
-          ><select id="contrast">
-            <option value="standard">Standard</option>
-            <option value="high">High</option>
-          </select></label
-        >
-      </section>
-      <section>
-        <header>
-          <h2>Preview</h2>
-          <p class="muted">Changes take effect immediately.</p>
-        </header>
-        <div class="surface-fields">
-          <label
-            >Example value<input
-              type="number"
-              value="130"
-              readonly
-              aria-label="Read-only appearance preview" /></label
-          ><label
-            >Example control<button type="button" disabled>
-              Preview only
-            </button></label
-          >
+
+      <section class="appearance-section" aria-labelledby="appearanceHeading">
+        <header><h2 id="appearanceHeading">Appearance</h2><p class="muted">Choose a look for the whole E-Stack workspace.</p></header>
+        <div class="appearance-choice">
+          <div><strong>Background</strong><small>Dark palettes keep levels and safety states readable.</small></div>
+          <div class="swatch-grid" role="group" aria-label="Background color">
+            <button type="button" class="theme-swatch" data-choice="background" data-value="graphite">Graphite</button>
+            <button type="button" class="theme-swatch" data-choice="background" data-value="midnight">Midnight</button>
+            <button type="button" class="theme-swatch" data-choice="background" data-value="slate">Slate</button>
+            <button type="button" class="theme-swatch" data-choice="background" data-value="warm">Warm</button>
+          </div>
         </div>
-        <p class="surface-note">
-          These settings do not change audio processing, presets, gain or safety
-          confirmations.
-        </p>
+        <div class="appearance-choice">
+          <div><strong>Accent color</strong><small>Used for navigation, selected controls and focus.</small></div>
+          <div class="swatch-grid" role="group" aria-label="Accent color">
+            <button type="button" class="accent-swatch" data-choice="accent" data-value="cyan">Cyan</button>
+            <button type="button" class="accent-swatch" data-choice="accent" data-value="mint">Mint</button>
+            <button type="button" class="accent-swatch" data-choice="accent" data-value="amber">Amber</button>
+            <button type="button" class="accent-swatch" data-choice="accent" data-value="violet">Violet</button>
+          </div>
+        </div>
       </section>
-      <div class="surface-actions">
-        <small>No account or server storage is used.</small
-        ><button id="reset">Restore display defaults</button>
-      </div>
+
+      <section aria-labelledby="layoutHeading">
+        <header><h2 id="layoutHeading">Display & navigation</h2></header>
+        <label class="toggle-row"><span><strong>Information density</strong><small>Spacing between controls.</small></span><select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+        <label class="toggle-row"><span><strong>Contrast</strong><small>Stronger outlines and secondary labels.</small></span><select id="contrast"><option value="standard">Standard</option><option value="high">High</option></select></label>
+        <label class="toggle-row"><span><strong>Corner style</strong><small>Shape of panels and controls.</small></span><select id="corners"><option value="soft">Soft</option><option value="crisp">Crisp</option></select></label>
+        <label class="toggle-row"><span><strong>Default page</strong><small>Opened when the app URL has no page selected.</small></span><select id="homePage"><option value="control">Control</option><option value="input-processing">Input Processing</option><option value="output-processing">Output Processing</option><option value="loudness">Loudness</option><option value="system-presets">System Presets</option><option value="signal-generator">Signal Generator</option><option value="measurement-batch">Measurement Batch</option><option value="advanced">Advanced</option><option value="connections">Connections</option><option value="preferences">Preferences</option></select></label>
+      </section>
+
+      <footer class="preferences-footer"><small>Saved in this browser · Audio processing is unchanged</small><button id="reset" type="button">Restore defaults</button></footer>
       <p id="notice" role="status"></p>
     </main>
+    <script src="../../shared/appearance.js?v=appearance1"></script>
     <script src="../../shared/estack-dsp-bridge.js"></script>
     <script src="../../shared/product-surface.js"></script>
-    <script src="./page.js?v=live-batch1"></script>
+    <script src="./page.js?v=appearance1"></script>
   </body>
 </html>

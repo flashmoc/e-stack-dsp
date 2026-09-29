@@ -1,46 +1,45 @@
 (() => {
   "use strict";
-  const { $, note, preferences } = EStackSurface;
-  const key = "estack.product.presentation";
-  function read() {
-    let p = {};
-    try {
-      p = JSON.parse(localStorage.getItem(key) || "{}");
-    } catch {}
-    $("density").value = p.density === "compact" ? "compact" : "comfortable";
-    $("contrast").value = p.contrast === "high" ? "high" : "standard";
-    preferences();
-    $("state").textContent = "Browser preferences";
+
+  const { $, note } = EStackSurface;
+  const appearance = EStackAppearance;
+  const fields = ["density", "contrast", "corners", "homePage"];
+
+  function render() {
+    const settings = appearance.read();
+    for (const field of fields) $(field).value = settings[field];
+    document.querySelectorAll("[data-choice]").forEach(button => {
+      button.setAttribute("aria-pressed", String(settings[button.dataset.choice] === button.dataset.value));
+    });
+    appearance.apply(document, settings);
   }
-  function save() {
+
+  function save(patch) {
     try {
-      localStorage.setItem(
-        key,
-        JSON.stringify({
-          density: $("density").value,
-          contrast: $("contrast").value,
-        }),
-      );
-      preferences();
-      note("Display preferences saved in this browser.");
-    } catch (e) {
-      note(
-        "Browser storage unavailable; preferences could not be saved.",
-        true,
-      );
+      appearance.save({ ...appearance.read(), ...patch });
+      render();
+      parent.postMessage({ type: "estack-appearance-changed" }, location.origin);
+      note("Preferences saved in this browser.");
+    } catch {
+      note("Browser storage unavailable; preferences could not be saved.", true);
     }
   }
-  $("density").onchange = save;
-  $("contrast").onchange = save;
-  $("reset").onclick = () => {
+
+  document.querySelectorAll("[data-choice]").forEach(button => {
+    button.addEventListener("click", () => save({ [button.dataset.choice]: button.dataset.value }));
+  });
+  for (const field of fields) $(field).addEventListener("change", () => save({ [field]: $(field).value }));
+
+  $("reset").addEventListener("click", () => {
     try {
-      localStorage.removeItem(key);
-      read();
+      localStorage.removeItem(appearance.KEY);
+      render();
+      parent.postMessage({ type: "estack-appearance-changed" }, location.origin);
       note("Display defaults restored.");
     } catch {
       note("Browser storage unavailable.", true);
     }
-  };
-  addEventListener("storage", read);
-  read();
+  });
+  addEventListener("storage", event => { if (event.key === appearance.KEY) render(); });
+  render();
 })();
