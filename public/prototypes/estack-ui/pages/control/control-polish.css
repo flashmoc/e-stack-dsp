@@ -42,13 +42,15 @@
 .control-heading span { padding-left:12px; border-left:1px solid var(--color-border-subtle); color:var(--color-muted); font-size:11px; }
 .control-page .channel-pair { padding-bottom:0; align-items:stretch; }
 .control-page .channel-pair .mixer-strip { padding-bottom:16px; }
-.control-page .channel-pair .mixer-strip header { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:1px; height:55px; min-height:55px; padding:5px 3px 4px; }
-.control-page .channel-pair .mixer-strip header>div { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
-.control-page .channel-pair .mixer-strip header output { align-self:flex-end; min-width:0; line-height:12px; }
-.control-page .strip-pair-link { flex:none; min-width:54px; min-height:24px; padding:2px 5px; border:1px solid rgba(var(--pair),.58); border-radius:3px; background:rgba(var(--pair),.12); color:rgb(var(--pair)); font:800 8px var(--font-family-data); letter-spacing:.025em; cursor:pointer; }
+.control-page .channel-pair .mixer-strip header { display:grid; grid-template-columns:auto minmax(30px,1fr) auto; align-items:center; gap:3px; height:46px; min-height:46px; padding:8px 3px 6px; }
+.control-page .channel-pair .mixer-strip header>div { display:contents; }
+.control-page .channel-pair .mixer-strip header span { display:none; }
+.control-page .channel-pair .mixer-strip header output { justify-self:end; min-width:0; line-height:12px; }
+.control-page .strip-pair-link { justify-self:center; min-width:30px; min-height:24px; padding:2px 1px; border:1px solid rgba(var(--pair),.58); border-radius:3px; background:rgba(var(--pair),.12); color:rgb(var(--pair)); font:800 6.5px var(--font-family-data); letter-spacing:0; cursor:pointer; }
 .control-page .strip-pair-link[aria-pressed="false"] { color:#9db0b4; border-color:rgba(255,255,255,.24); background:rgba(255,255,255,.035); }
 .control-page .strip-pair-link:hover:not(:disabled),.control-page .strip-pair-link:focus-visible { border-color:rgb(var(--pair)); background:rgba(var(--pair),.22); }
 .control-page .strip-pair-link:disabled { opacity:.45; cursor:default; }
+.control-page .channel-pair .mute-button { margin-top:0; }
 .control-page .channel-pair { border-radius:6px; overflow:hidden; }
 .control-page .mixer-strip { border-radius:5px; }
 @media(max-width:700px) {
@@ -57,12 +59,12 @@
   .control-heading span { display:none; }
   .control-page .console-bank { gap:12px; }
   .control-page .channel-pair { gap:0; }
-  .control-page .channel-pair .mixer-strip header { height:66px; min-height:66px; }
+  .control-page .channel-pair .mixer-strip header { height:43px; min-height:43px; }
   .control-page .strip-pair-link { min-height:34px; }
   .control-page .mixer-actions { padding:12px; }
 }
 
-@media(min-width:1101px) { .control-page .console-bank>.mixer-strip { padding-bottom:82px; } }
+@media(min-width:431px) { .control-page .console-bank>.mixer-strip { padding-bottom:16px; } }
 
 /* Independent scales: measured level (-60..0 dBFS) and adjustable gain. */
 .control-page .calibrated-meter {

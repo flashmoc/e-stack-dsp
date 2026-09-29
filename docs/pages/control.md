@@ -86,8 +86,9 @@ and Level Lock on a dedicated row below the protection summary.
   peak hold, calibrated voltage model and `−90 dBFS` no-signal threshold.
   Silence yields `WAITING` / `PLAY SIGNAL`; automatic Input Trim is unavailable.
 - MID/HIGH links apply to Gain changes only. Mute remains per selected way.
-  Each affected way has a compact link button beside its name; the two buttons
-  in a pair reflect one shared state, while MID and HIGH remain independent.
+  Each affected way has a compact link button between its name and dBFS readout;
+  the two buttons in a pair reflect one shared state, while MID and HIGH remain
+  independent. All way headers and mute buttons stay aligned.
 
 ## Faders and Level Lock
 

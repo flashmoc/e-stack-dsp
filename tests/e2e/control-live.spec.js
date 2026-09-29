@@ -118,6 +118,30 @@ test.describe('Control live CamillaNode demo', () => {
         await expect(mid.nth(1)).toHaveAttribute('aria-pressed', midInitial);
         await expect(high.nth(1)).toHaveAttribute('aria-pressed', highInitial);
         expect(await dspCommand('GetConfigJson')).toEqual(original);
+        const alignment = await frame.evaluate(() => {
+            const way = name => [...document.querySelectorAll('article.mixer-strip:not(.master-strip)')]
+                .find(card => card.querySelector('header strong')?.textContent === name);
+            const box = element => element.getBoundingClientRect();
+            const sub = way('SUB');
+            return ['MID L', 'MID R', 'HIGH L', 'HIGH R'].map(name => {
+                const card = way(name);
+                const title = box(card.querySelector('header strong'));
+                const link = box(card.querySelector('[data-link-toggle]'));
+                const level = box(card.querySelector('header output'));
+                return {
+                    linkBetween: title.right < link.left && link.right < level.left,
+                    headerOffset: Math.abs(box(card.querySelector('header')).bottom - box(sub.querySelector('header')).bottom),
+                    muteOffset: Math.abs(box(card.querySelector('.mute-button')).top - box(sub.querySelector('.mute-button')).top),
+                    cardHeightOffset: Math.abs(box(card).height - box(sub).height)
+                };
+            });
+        });
+        for (const way of alignment) {
+            expect(way.linkBetween).toBeTruthy();
+            expect(way.headerOffset).toBeLessThan(2);
+            expect(way.muteOffset).toBeLessThan(2);
+            expect(way.cardHeightOffset).toBeLessThan(2);
+        }
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(mid.first()).toBeVisible();
         await mid.first().scrollIntoViewIfNeeded();
