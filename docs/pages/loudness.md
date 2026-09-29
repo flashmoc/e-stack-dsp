@@ -20,6 +20,11 @@ diagnostics remain on the Connections page rather than duplicating that panel.
 The status row explicitly distinguishes `OFF`, `ON`, and `ON · LINK DOWN`.
 This reflects the verified DSP Loudness filter state separately from WiiM
 telemetry; the button says `Turn on` or `Turn off` to describe its action.
+The WiiM summary shows fresh bridge-reported `wiimVolume` as a percentage and
+`realAttenuationDb` as calibrated attenuation. This dB value comes from the
+WiiM volume calibration table and is not a measured dBFS signal level. Stale
+or disconnected WiiM telemetry is shown as unavailable, not as a retained
+volume reading.
 Offline mode is a disabled explanatory surface; no operational mock is loaded.
 Software validation: scoped preset/curve E2E and responsive viewport checks.
 Actual WiiM/hardware acceptance remains separate.

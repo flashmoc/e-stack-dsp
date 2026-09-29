@@ -211,7 +211,7 @@
     }
     const bridge = b.status === "fulfilled" ? b.value : null;
     lastBridge = bridge;
-    $("bridgeState").textContent = !bridge
+    const linkState = !bridge
       ? "Unavailable"
       : !bridge.serviceAlive
         ? "Bridge off"
@@ -220,7 +220,22 @@
           : !bridge.camillaConnected
             ? "DSP link lost"
             : "Connected";
-    $("bridgeState").title = bridge?.reason || "";
+    const wiimFresh = bridge?.serviceAlive && bridge.wiimConnected &&
+      typeof bridge.wiimVolume === "number" && Number.isFinite(bridge.wiimVolume);
+    $("wiimVolume").textContent = wiimFresh
+      ? `${Math.round(bridge.wiimVolume)} %`
+      : "—";
+    const calibratedDb = wiimFresh && typeof bridge.realAttenuationDb === "number" &&
+      Number.isFinite(bridge.realAttenuationDb)
+      ? `${bridge.realAttenuationDb.toFixed(1)} dB attenuation`
+      : "";
+    $("wiimDetail").textContent = wiimFresh
+      ? [bridge.wiimMute ? "Muted" : "", calibratedDb, bridge.camillaConnected ? "" : "DSP link lost"]
+        .filter(Boolean).join(" · ") || linkState
+      : linkState;
+    $("wiimDetail").title = wiimFresh
+      ? "Calibrated WiiM attenuation; not a measured dBFS signal level"
+      : bridge?.reason || "";
     $("compensation").textContent =
       live && !live.enabled
         ? "Off"

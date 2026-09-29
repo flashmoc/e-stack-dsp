@@ -20,6 +20,12 @@
   font: 17px var(--font-family-data, monospace);
 }
 
+.loudness-wiim-detail {
+  color: #9bb2b7;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .loudness-power {
   display: flex;
   align-items: center;

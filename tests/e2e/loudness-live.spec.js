@@ -18,6 +18,8 @@ test('loudness displays live compensation and keeps server preset mutations scop
       wiimConnected: bridgeConnected,
       camillaConnected: bridgeConnected,
       compensationFactor: factor,
+      wiimVolume: 32,
+      realAttenuationDb: -24.3,
       state: bridgeConnected ? 'connected' : 'offline'
     }
   }));
@@ -29,7 +31,8 @@ test('loudness displays live compensation and keeps server preset mutations scop
 
     await f.locator('[data-preset=home]').click();
     await expect(f.locator('#presetName')).toHaveText('HOME');
-    await expect(f.locator('#bridgeState')).toHaveText('Connected');
+    await expect(f.locator('#wiimVolume')).toHaveText('32 %');
+    await expect(f.locator('#wiimDetail')).toHaveText('-24.3 dB attenuation');
     await expect(f.locator('#compensation')).toHaveText('25 %');
     await expect(f.locator('#loudnessMode')).toHaveText('ON');
     await expect(f.locator('#loudnessMode')).toHaveAttribute('data-state', 'ready');
@@ -47,7 +50,8 @@ test('loudness displays live compensation and keeps server preset mutations scop
     await expect(f.locator('#responseCurrent')).toHaveAttribute('d', maxPath);
     bridgeConnected = false;
     await expect(f.locator('#responseStatus')).toContainText('unavailable');
-    await expect(f.locator('#bridgeState')).toHaveText('Bridge off');
+    await expect(f.locator('#wiimVolume')).toHaveText('—');
+    await expect(f.locator('#wiimDetail')).toHaveText('Bridge off');
     await expect(f.locator('#loudnessMode')).toHaveText('ON · LINK DOWN');
     await expect(f.locator('#loudnessMode')).toHaveAttribute('data-state', 'degraded');
     await expect(f.locator('#responseCurrent')).not.toHaveAttribute('d');
