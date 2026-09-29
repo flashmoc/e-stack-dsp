@@ -116,10 +116,14 @@ scrolls, keeping the system overview and navigation visible.
 
 ## Final shell and workflow integration
 
-The shell mounts once and defaults to Control. Desktop navigation groups
-Processing (Control/Input/Output), Systems (Loudness/System Presets), Tools
-(Signal/Measurement), and System (Advanced/Connections/Preferences). Mobile
-uses a grouped native select. Every route preserves transport=camillanode.
+The shell mounts once and defaults to the browser-selected page (Control by
+default). Desktop navigation groups Processing (Control/Input/Output), Systems
+(Loudness), Tools (Signal/Measurement), and System
+(Advanced/Connections/Preferences). System Presets and Startup open in a
+dialog from the shell beside CamillaGUI, preserving the tuning page beneath.
+Mobile uses a grouped native select and a separate Presets button. Direct
+`#system-presets` links open the same dialog. Every route preserves
+transport=camillanode.
 The live shell imports no fixtures; preview messaging is isolated in a separate
 conditionally loaded module. Design System is retained only as developer reference.
 

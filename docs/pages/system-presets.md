@@ -1,5 +1,13 @@
 # System Presets and Startup Configuration
 
+The shell opens this workspace in a dialog from the System Presets button
+beside CamillaGUI; it is not a tuning navigation tab. The same live page and
+server APIs handle choosing, saving, renaming, applying, deleting and startup
+selection. A direct `#system-presets` URL opens the dialog above Control;
+closing it returns to the underlying tuning page. On phone the separate
+Presets button remains available beside the page selector. The standalone
+page URL remains usable for diagnostics and existing integrations.
+
 Saved systems can be renamed by ID through /api/system-presets/rename. Names
 must be unique within estack-system. Snapshot data, ID and creation date remain
 unchanged; active/startup/last-used/boot-applied reference names follow the rename.

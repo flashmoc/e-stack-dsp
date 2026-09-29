@@ -36,7 +36,8 @@ html, body { height:100%; overflow:hidden; }
 html[data-transport=live] .app-frame { grid-template-rows:auto auto minmax(0,1fr); }
 .shell-nav .group-start:not(:first-child) { margin-left:12px; border-left:1px solid var(--color-border-subtle); }
 .shell-nav a { font-size:13px; padding-inline:10px; }
-.shell-nav .shell-gui-link { margin-left:auto; color:var(--color-accent); border-left:1px solid var(--color-border-subtle); }
+.shell-nav .shell-presets-button { margin-left:auto; }
+.shell-nav .shell-gui-link { margin-left:0; color:var(--color-accent); border-left:1px solid var(--color-border-subtle); }
 .shell-nav .shell-gui-link:hover { color:var(--color-text-primary); }
 .shell-mobile-nav .shell-gui-link { display:none; }
 .environment-banner { display:flex; justify-content:center; gap:12px; padding:6px; background:#eab749; color:#142126; font-size:11px; }

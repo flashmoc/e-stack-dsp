@@ -3,7 +3,7 @@ const { demo } = require('./batch-helpers');
 
 const pages = [
   'input-processing', 'control', 'output-processing', 'loudness',
-  'system-presets', 'signal-generator', 'measurement-batch',
+  'signal-generator', 'measurement-batch',
   'advanced', 'connections', 'preferences',
 ];
 
@@ -15,7 +15,7 @@ test('product workspaces share the Input page alignment without mobile overflow'
     let inputLeft;
     for (const name of pages) {
       await page.goto(`/estack-dsp/?transport=camillanode#${name}`);
-      const main = page.frameLocator('iframe').locator('main');
+      const main = page.frameLocator('#pageFrame').locator('main');
       await expect(main.locator('h1')).toBeVisible();
       const layout = await main.evaluate(element => {
         const rect = element.getBoundingClientRect();

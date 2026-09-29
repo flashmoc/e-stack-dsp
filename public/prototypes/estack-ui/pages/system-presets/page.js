@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  document.documentElement.dataset.display = new URLSearchParams(location.search).get('display') === 'dialog' ? 'dialog' : 'page';
   const { B, $, post, note } = window.EStackSurface;
   let busy = false,
     polling = false,

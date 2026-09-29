@@ -5,7 +5,6 @@ const routes = [
   "input-processing",
   "output-processing",
   "loudness",
-  "system-presets",
   "signal-generator",
   "measurement-batch",
   "advanced",
@@ -36,6 +35,21 @@ for (const width of [390, 1440])
     await guiPage.waitForLoadState('domcontentloaded');
     expect(guiPage.url()).toContain('/camillagui/gui/index.html');
     await guiPage.close();
+    const presetsButton = page.locator(width === 390 ? '.shell-mobile-nav [data-open-presets]' : '.shell-nav [data-open-presets]');
+    await expect(presetsButton).toBeVisible();
+    await expect(page.locator('.shell-nav [data-page="system-presets"]')).toHaveCount(0);
+    await expect(page.locator('#mobilePageSelect option[value="system-presets"]')).toHaveCount(0);
+    await presetsButton.click();
+    await expect(page.locator('#systemPresetsDialog')).toBeVisible();
+    const presetFrame = page.frameLocator('#systemPresetsFrame');
+    await expect(presetFrame.locator('#activeName')).toBeVisible();
+    await expect(presetFrame.locator('#captureForm')).toBeVisible();
+    await expect(presetFrame.locator('#startupForm')).toBeVisible();
+    expect(await presetFrame.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.locator('[data-shell-load]')).toHaveText(/\d+\.\d %/);
+    await page.locator('[data-close-presets]').click();
+    await expect(page.locator('#systemPresetsDialog')).toBeHidden();
+    await expect(page).toHaveURL(/#control$/);
     const shell = await page.locator(".shell-health").elementHandle();
     for (const route of routes) {
       if (width === 390)
@@ -76,3 +90,26 @@ for (const width of [390, 1440])
       ),
     ).toBe(true);
   });
+
+test('System Presets deep link opens a dialog above Control', async ({ page, request }) => {
+  await demo(request);
+  await page.goto('/estack-dsp/?transport=camillanode#system-presets');
+  await expect(page.locator('#systemPresetsDialog')).toBeVisible();
+  await expect(page.frameLocator('#pageFrame').locator('h1')).toContainText('Control');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#systemPresetsDialog')).toBeHidden();
+  await expect(page).toHaveURL(/#control$/);
+});
+
+test('closing System Presets preserves the current tuning workspace', async ({ page, request }) => {
+  await demo(request);
+  await page.goto('/estack-dsp/?transport=camillanode#output-processing');
+  await expect(page.frameLocator('#pageFrame').locator('h1')).toContainText('Output Processing');
+  const tuningFrame = await page.locator('#pageFrame').elementHandle();
+  await page.locator('.shell-nav [data-open-presets]').click();
+  await expect(page.locator('#systemPresetsDialog')).toBeVisible();
+  await page.locator('[data-close-presets]').click();
+  await expect(page).toHaveURL(/#output-processing$/);
+  expect(await tuningFrame.evaluate(el => el.isConnected)).toBe(true);
+  await expect(page.frameLocator('#pageFrame').locator('h1')).toContainText('Output Processing');
+});

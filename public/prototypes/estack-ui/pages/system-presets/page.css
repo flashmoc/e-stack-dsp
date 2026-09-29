@@ -4,6 +4,8 @@
   gap: 20px;
   align-items: start;
 }
+html[data-display="dialog"] .product-surface > .surface-heading { display:none; }
+html[data-display="dialog"] .product-surface { padding:14px; }
 .system-sidebar,
 .preset-list,
 form {

@@ -18,7 +18,7 @@
     corners: ["soft", "crisp"],
     homePage: [
       "control", "input-processing", "output-processing", "loudness",
-      "system-presets", "signal-generator", "measurement-batch",
+      "signal-generator", "measurement-batch",
       "advanced", "connections", "preferences",
     ],
   };

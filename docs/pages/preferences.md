@@ -12,7 +12,8 @@ The existing product-surface density/contrast rules continue to apply.
 The default page is selected only when `/estack-dsp/` opens without a hash.
 An explicit `#page` route takes precedence, so bookmarks keep their target.
 The page choice does not change during navigation, and resetting preferences
-returns it to Control.
+returns it to Control. System Presets is opened as a shell dialog, so it is
+not offered as a default tuning page.
 
 Background palettes remain dark to preserve the readability of level and
 protection states. These settings never enter DSP configurations, server
