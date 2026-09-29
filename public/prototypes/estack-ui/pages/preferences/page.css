@@ -60,6 +60,17 @@
 .connections-devices dl { margin-top:4px; }
 #connectionNotice { margin-top:12px; }
 #connectionNotice[data-state="error"] { color:var(--color-critical); }
+#chunkSizeState { color:var(--color-accent); font-size:11px; }
+.chunk-size-grid { display:grid; grid-template-columns:1fr minmax(220px,1.5fr) 1fr; gap:12px; margin:18px 0 12px; }
+.chunk-size-grid > * { display:flex; flex-direction:column; gap:7px; padding:12px; border:1px solid var(--color-border-subtle); border-radius:5px; background:var(--color-control); min-width:0; }
+.chunk-size-grid small, .chunk-size-select > span { color:var(--color-muted); font-size:11px; }
+.chunk-size-grid strong { color:var(--color-text-primary); font-size:18px; }
+.chunk-size-current span, .chunk-size-estimate span { color:var(--color-muted); font-size:12px; }
+.chunk-size-select select { width:100%; max-width:none; min-height:40px; }
+.chunk-size-note { line-height:1.5; }
+.chunk-size-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+#chunkSizeNotice { min-height:1.2em; margin-top:10px; }
+#chunkSizeNotice[data-error="true"] { color:var(--color-critical); }
 @media (max-width: 700px) {
   .preferences-page section { padding: 14px; }
   .preferences-page .appearance-choice { grid-template-columns: 1fr; gap: 10px; }
@@ -80,4 +91,8 @@
   .preferences-page #connectionsPanel .surface-metrics > div { display:flex; justify-content:space-between; gap:12px; }
   .preferences-page #connectionsPanel .surface-metrics strong { font-size:13px; text-align:right; }
   .connections-details,.connections-devices { grid-template-columns:1fr; gap:0; }
+  .chunk-size-grid { grid-template-columns:1fr; }
+  .chunk-size-select select { font-size:16px; }
+  .chunk-size-actions { justify-content:stretch; }
+  .chunk-size-actions button { flex:1; }
 }

@@ -67,6 +67,14 @@ POST /api/output-protection accepts {channel, clip} and changes only that way's
 limiter ceiling and compressor threshold (clip − 1 dB). Both use the server
 workflow gate and verified safe-Master transaction.
 
+GET /api/chunk-size returns the live sample rate, current size and block
+duration, recommended size, allowed presets, DSP revision and `live-only`
+persistence. POST /api/chunk-size accepts `{revision, chunksize,
+acknowledgeAudioInterruption: true}`. It changes only the live
+`devices.chunksize` through a guarded server transaction. A stale revision,
+active temporary workflow, unsupported preset or missing acknowledgement is
+rejected. No YAML or other device setting is written.
+
 POST /api/system-presets/rename accepts {id, name}. It keeps the record ID,
 data and creation date, rejects duplicate names and updates matching active,
 startup, last-used and boot-applied names without contacting the DSP.

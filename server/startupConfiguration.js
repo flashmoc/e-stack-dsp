@@ -885,5 +885,70 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
         throw error;
       } finally { ws.close(); }
     }),
+    // A narrow live device-buffer edit. Hardware YAML and every other device
+    // setting remain outside this API's scope.
+    editChunkSize: (expected, target) => gate(async () => {
+      assertNormalWorkflow();
+      const policy = require("./chunkSizePolicy");
+      const revision = require("./advancedModel").revision;
+      const ws = await openDsp();
+      let attenuated = false, safeVolume = SAFE_BOOT_VOLUME_DB;
+      try {
+        const live = await dspRequest(ws, "GetConfigJson");
+        if (live.devices?.capture?.type === "SignalGenerator")
+          throw new Error("Stop Signal Generator before changing chunk size");
+        if (revision(live) !== expected)
+          throw new Error("DSP changed since review. Refresh the current chunk size.");
+        policy.assertAllowed(live.devices?.samplerate, target,
+          live.devices?.target_level, live.devices?.queuelimit);
+        if (!Number.isInteger(live.devices?.chunksize))
+          throw new Error("Live chunk size is unavailable");
+        if (live.devices.chunksize === target)
+          return { config: live, revision: expected };
+        const next = clone(live);
+        next.devices.chunksize = target;
+        validateProcessingSnapshot(processingOf(next), next.mixers, next.devices);
+        const volume = await dspRequest(ws, "GetVolume");
+        if (!Number.isFinite(volume) || volume < -100 || volume > 0)
+          throw new Error("Invalid live Master");
+        safeVolume = Math.min(volume, SAFE_BOOT_VOLUME_DB);
+        attenuated = true;
+        await dspRequest(ws, { SetVolume: safeVolume });
+        await dspRequest(ws, { SetConfigJson: JSON.stringify(next) });
+        // A device-buffer edit restarts CamillaDSP's processing thread. Its
+        // volume can reset after SetConfigJson has already acknowledged, so
+        // wait for the new stream before restoring the previous Master.
+        await new Promise(resolve => setTimeout(resolve, 700));
+        let running = false;
+        for (let attempt = 0; attempt < 30; attempt++) {
+          if (await dspRequest(ws, "GetState") === "Running") {
+            running = true;
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        if (!running) throw new Error("CamillaDSP did not resume after chunk-size change");
+        const actual = await dspRequest(ws, "GetConfigJson");
+        if (revision(actual) !== revision(next))
+          throw new Error("Chunk-size readback mismatch");
+        await dspRequest(ws, { SetVolume: volume });
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const actualVolume = await dspRequest(ws, "GetVolume");
+        if (!Number.isFinite(actualVolume) || Math.abs(actualVolume - volume) > .05)
+          throw new Error("Master readback mismatch");
+        return { config: actual, revision: revision(actual) };
+      } catch (error) {
+        if (attenuated) {
+          const held = await dspRequest(ws, { SetVolume: safeVolume })
+            .then(() => dspRequest(ws, "GetVolume"))
+            .then(value => Number.isFinite(value) && Math.abs(value - safeVolume) <= .05)
+            .catch(() => false);
+          error.message += held
+            ? `; Master held at ${safeVolume} dB. Inspect the system before raising it.`
+            : "; Master safety could not be verified. Stop and inspect the system.";
+        }
+        throw error;
+      } finally { ws.close(); }
+    }),
   };
 };

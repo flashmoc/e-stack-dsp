@@ -1,7 +1,27 @@
 "use strict";
 const express = require("express");
 const model = require("./advancedModel");
+const chunkSizePolicy = require("./chunkSizePolicy");
 module.exports = (app, system) => {
+  const chunkState = ({ config, revision }) => ({
+    ...chunkSizePolicy.describe(config.devices?.samplerate, config.devices?.chunksize,
+      config.devices?.target_level, config.devices?.queuelimit),
+    revision,
+    targetLevel: config.devices?.target_level ?? null,
+    persistence: "live-only",
+  });
+  app.get("/api/chunk-size", async (_req, res) => {
+    try { res.json(chunkState(await system.readProcessing())); }
+    catch (error) { res.status(503).json({ error: error.message }); }
+  });
+  app.post("/api/chunk-size", express.json({ limit: "4kb" }), async (req, res) => {
+    try {
+      if (typeof req.body?.revision !== "string" ||
+          req.body?.acknowledgeAudioInterruption !== true)
+        throw new Error("Review the live configuration and confirm the audio interruption");
+      res.json(chunkState(await system.editChunkSize(req.body.revision, req.body.chunksize)));
+    } catch (error) { res.status(409).json({ error: error.message }); }
+  });
   app.post("/api/output-protection", express.json({ limit: "4kb" }), async (req, res) => {
     try {
       const before = await system.readProcessing();

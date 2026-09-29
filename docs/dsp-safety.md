@@ -86,3 +86,18 @@ ratio, routing and other ways remain unchanged.
 
 Master mute uses native GetMute/SetMute and verifies the result. It never emulates
 mute by changing volume or rewriting way gains.
+
+## Live chunk size
+
+Preferences uses the server-owned `/api/chunk-size` operation. The request
+contains a reviewed configuration revision and one offered power-of-two size;
+the browser cannot send a replacement configuration. The server refuses active
+Signal Generator or Measurement Batch state and SignalGenerator capture, checks
+the exact revision and playback-buffer compatibility, clones the live DSP
+configuration, and changes only `devices.chunksize`. It validates processing,
+attenuates Master to the lower of its current value and −60 dB, uploads once,
+verifies the full config readback, then restores and verifies Master. On a
+post-attenuation failure the server attempts and verifies a safe Master hold;
+if it cannot verify the hold, the error says so. The transaction does not write
+hardware YAML, ALSA or startup state;
+CamillaDSP may briefly interrupt audio when applying a new buffer size.

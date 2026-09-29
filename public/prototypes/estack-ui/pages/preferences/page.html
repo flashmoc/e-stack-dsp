@@ -8,13 +8,13 @@
     <link rel="stylesheet" href="../../shared/tokens.css?v=appearance1" />
     <link rel="stylesheet" href="../../shared/base.css" />
     <link rel="stylesheet" href="../../shared/workflow-surface.css?v=workspace-layout1" />
-    <link rel="stylesheet" href="./page.css?v=connections-in-preferences1" />
+    <link rel="stylesheet" href="./page.css?v=chunk-size1" />
   </head>
   <body>
     <main class="product-surface preferences-page" data-page="preferences">
       <header class="surface-heading">
-        <div><h1>Preferences</h1><p class="eyebrow">This browser</p></div>
-        <output id="state" role="status">Saved locally</output>
+        <div><h1>Preferences</h1><p class="eyebrow">Display & audio</p></div>
+        <output id="state" role="status">Display saved locally</output>
       </header>
 
       <section class="appearance-section" aria-labelledby="appearanceHeading">
@@ -47,6 +47,21 @@
         <label class="toggle-row"><span><strong>Default page</strong><small>Opened when the app URL has no page selected.</small></span><select id="homePage"><option value="control">Control</option><option value="input-processing">Input Processing</option><option value="output-processing">Output Processing</option><option value="loudness">Loudness</option><option value="signal-generator">Signal Generator</option><option value="measurement-batch">Measurement Batch</option><option value="advanced">Advanced</option><option value="preferences">Preferences</option></select></label>
       </section>
 
+      <section id="chunkSizePanel" aria-labelledby="chunkSizeHeading">
+        <header class="surface-actions">
+          <div><h2 id="chunkSizeHeading">Audio buffer</h2><p class="muted">Choose a CamillaDSP chunk size for the current session.</p></div>
+          <output id="chunkSizeState" role="status">Reading live DSP…</output>
+        </header>
+        <div class="chunk-size-grid">
+          <div class="chunk-size-current"><small>LIVE CONFIGURATION</small><strong id="chunkSizeCurrent">—</strong><span id="chunkSizeRate">—</span></div>
+          <label class="chunk-size-select"><span>Chunk size</span><select id="chunkSizeChoice" disabled><option>Waiting for DSP</option></select></label>
+          <div class="chunk-size-estimate"><small>SELECTED BLOCK DURATION</small><strong id="chunkSizeEstimate">—</strong><span id="chunkSizeProfile">—</span></div>
+        </div>
+        <p class="muted chunk-size-note">One block = samples ÷ sample rate. This is an estimate of buffer duration, not total audio latency; device and driver buffers add delay. Smaller blocks can increase CPU load and underrun risk. Applying may briefly interrupt audio and does not edit the hardware YAML.</p>
+        <div class="chunk-size-actions"><button id="chunkSizeRefresh" type="button">Refresh</button><button id="chunkSizeApply" type="button" disabled>Apply live chunk size</button></div>
+        <p id="chunkSizeNotice" role="status"></p>
+      </section>
+
       <section id="connectionsPanel" aria-labelledby="connectionsHeading">
         <header class="surface-actions">
           <div><h2 id="connectionsHeading">Connections</h2><p class="muted">Live, read-only system diagnostics.</p></div>
@@ -70,13 +85,14 @@
         <p id="connectionNotice" class="muted" role="status"></p>
       </section>
 
-      <footer class="preferences-footer"><small>Saved in this browser · Audio processing is unchanged</small><button id="reset" type="button">Restore defaults</button></footer>
+      <footer class="preferences-footer"><small>Appearance and default page are saved in this browser. Audio buffer is a separate live DSP setting.</small><button id="reset" type="button">Restore display defaults</button></footer>
       <p id="notice" role="status"></p>
     </main>
     <script src="../../shared/appearance.js?v=connections-in-preferences1"></script>
     <script src="../../shared/estack-dsp-bridge.js"></script>
     <script src="../../shared/product-surface.js"></script>
     <script src="../../shared/connections-inspector.js?v=connections-in-preferences1"></script>
-    <script src="./page.js?v=connections-in-preferences1"></script>
+    <script src="./chunk-size.js?v=chunk-size1"></script>
+    <script src="./page.js?v=chunk-size1"></script>
   </body>
 </html>

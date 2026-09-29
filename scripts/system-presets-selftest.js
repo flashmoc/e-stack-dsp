@@ -7,6 +7,7 @@ const { EventEmitter } = require("events");
 const express = require("express");
 const store = require("../server/presetStore");
 const gate = require("../server/workflowGate");
+const chunkSizePolicy = require("../server/chunkSizePolicy");
 const clone = (value) => JSON.parse(JSON.stringify(value));
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "estack-system-test-"));
@@ -45,6 +46,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
       commands.push(clone(payload));
       let value;
       if (name === "GetConfigJson") value = JSON.stringify(config);
+      if (name === "GetState") value = "Running";
       if (name === "GetVolume") value = volume;
       if (name === "SetVolume") volume = payload.SetVolume;
       if (name === "SetConfigJson") {
@@ -114,6 +116,44 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
     corrupt = true;
     assert.equal((await api('/api/advanced/edit', { ...advancedChange, revision: currentRevision })).ok, false);
     assert.equal(volume, -60, 'failed Advanced readback must hold safe Master');
+    corrupt = false; config = clone(original); volume = -18;
+    assert.equal(chunkSizePolicy.describe(48000, 1024).recommended, 1024);
+    assert.equal(chunkSizePolicy.describe(96000, 2048).recommended, 2048);
+    assert.equal(chunkSizePolicy.describe(192000, 4096).recommended, 4096);
+    assert.equal(chunkSizePolicy.describe(48000, 1024).currentChunkMs, 21.3);
+    assert(!chunkSizePolicy.describe(48000, 2048, 8000).options.some(option => option.size < 2048),
+      'presets must retain the configured target playback buffer');
+    const chunkBefore = await api('/api/chunk-size');
+    assert(chunkBefore.ok);
+    assert.equal(chunkBefore.body.persistence, 'live-only');
+    assert.equal(chunkBefore.body.current, 1024);
+    const chunkChange = { revision: chunkBefore.body.revision, chunksize: 512, acknowledgeAudioInterruption: true };
+    commands.length = 0;
+    assert.equal((await api('/api/chunk-size', { ...chunkChange, acknowledgeAudioInterruption: false })).ok, false);
+    assert.equal((await api('/api/chunk-size', { ...chunkChange, chunksize: 513 })).ok, false);
+    assert(!commands.some(c => typeof c === 'object'), 'invalid chunk requests must not write');
+    for (const file of [signal, batch]) {
+      store.atomicWrite(file, {});
+      assert.equal((await api('/api/chunk-size', chunkChange)).ok, false);
+      fs.unlinkSync(file);
+    }
+    config.devices.capture.type = 'SignalGenerator';
+    assert.equal((await api('/api/chunk-size', chunkChange)).ok, false);
+    config.devices.capture.type = original.devices.capture.type;
+    assert(!commands.some(c => typeof c === 'object'), 'temporary workflows must block chunk writes');
+    assert((await api('/api/chunk-size', chunkChange)).ok);
+    assert.equal(config.devices.chunksize, 512);
+    assert.deepEqual({ ...config.devices, chunksize: 1024 }, original.devices);
+    assert.deepEqual(config.mixers, original.mixers);
+    assert.deepEqual(config.filters, original.filters);
+    assert.equal(volume, -18);
+    assert.deepEqual(commands.filter(c => typeof c === 'object').map(c => Object.keys(c)[0]), ['SetVolume', 'SetConfigJson', 'SetVolume']);
+    const chunkWrites = commands.length;
+    assert.equal((await api('/api/chunk-size', chunkChange)).ok, false, 'stale chunk revision must fail');
+    assert(!commands.slice(chunkWrites).some(c => typeof c === 'object'));
+    corrupt = true;
+    assert.equal((await api('/api/chunk-size', { ...chunkChange, revision: (await api('/api/chunk-size')).body.revision, chunksize: 1024 })).ok, false);
+    assert.equal(volume, -60, 'failed chunk readback must hold safe Master');
     corrupt = false; config = clone(original); volume = -18;
     const capture = await api("/api/system-presets/capture", {
       name: "Reference",

@@ -27,3 +27,27 @@ runtime, DSP and spectrum through EStackDSPBridge, shows current capture and
 playback devices, and offers a refresh action. It does not save browser
 preferences or send DSP writes. The former `#connections` route opens
 Preferences; stored Connections default-page choices migrate to Preferences.
+
+## Audio buffer
+
+Preferences also offers a **separate live DSP chunk-size control**. The server
+reads the actual sample rate and chunksize, then offers power-of-two presets
+around a roughly 22 ms starting point: 1024 samples at 44.1/48 kHz, 2048 at
+88.2/96 kHz and 4096 at 176.4/192 kHz. The UI computes each block duration as
+`chunksize / samplerate`; this is **not end-to-end latency**. Capture, playback,
+driver and any explicit `target_level` buffers also contribute. Smaller chunks
+can increase CPU load and underrun risk. Presets that would exceed CamillaDSP's
+configured target playback-buffer limit are omitted. See [CamillaDSP's chunk-size
+guidance](https://github.com/HEnquist/camilladsp/blob/master/README.md).
+
+Changing a value requires an explicit confirmation. The browser sends only the
+selected preset and a live revision to the server; it never uploads a DSP graph.
+The server blocks Signal Generator and Measurement Batch, uses a safe Master
+transition, verifies DSP configuration and Master readback, and attempts to hold
+Master attenuated after an unverified write, reporting whether that hold was
+verified. Only `devices.chunksize` changes. Applying
+may briefly interrupt audio. **The hardware YAML, ALSA, sample rate, devices,
+mixers and startup settings are not edited.** This is a live-session setting;
+the next CamillaDSP restart can restore the YAML value. The control is distinct
+from the browser-only appearance preferences and is disabled when the live DSP
+cannot be read.
