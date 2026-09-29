@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="../../shared/tokens.css" />
     <link rel="stylesheet" href="../../shared/base.css" />
     <link rel="stylesheet" href="../../shared/workflow-surface.css?v=workspace-layout1" />
+    <link rel="stylesheet" href="./page.css?v=frequency-response1" />
   </head>
   <body>
     <main class="product-surface" data-page="loudness">
@@ -41,6 +42,34 @@
           <div>
             <small>COMPENSATION</small><strong id="compensation">—</strong>
           </div>
+        </div>
+      </section>
+      <section class="loudness-response" aria-labelledby="responseTitle">
+        <header class="response-heading">
+          <div>
+            <h2 id="responseTitle">Loudness response</h2>
+            <p class="muted">Frequency contour derived from the selected preset and live WiiM compensation.</p>
+          </div>
+          <div class="response-legend" aria-label="Curve legend">
+            <span><i class="response-key response-key--maximum"></i>Maximum</span>
+            <span><i class="response-key response-key--current"></i>Current</span>
+          </div>
+        </header>
+        <svg id="responseChart" class="response-chart" viewBox="0 0 760 280" role="img" aria-label="Loudness boost by frequency: maximum and current compensation">
+          <defs>
+            <linearGradient id="responseFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#59d5e3" stop-opacity=".28" />
+              <stop offset="100%" stop-color="#59d5e3" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <g id="responseGrid" class="response-grid"></g>
+          <path id="responseArea" class="response-area" />
+          <path id="responseMaximum" class="response-maximum" />
+          <path id="responseCurrent" class="response-current" />
+        </svg>
+        <div class="response-footer">
+          <span id="responseStatus" role="status">Waiting for live state…</span>
+          <span>20 Hz – 20 kHz · estimated gain</span>
         </div>
       </section>
       <section>
