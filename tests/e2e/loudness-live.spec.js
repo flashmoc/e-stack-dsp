@@ -29,6 +29,8 @@ test('loudness displays live compensation and keeps server preset mutations scop
 
     await f.locator('[data-preset=home]').click();
     await expect(f.locator('#presetName')).toHaveText('HOME');
+    await expect(f.locator('#bridgeState')).toHaveText('Connected');
+    await expect(f.locator('#compensation')).toHaveText('25 %');
     await expect(f.locator('#responseStatus')).toHaveText('Current · 25% of maximum');
     const maxPath = await f.locator('#responseMaximum').getAttribute('d');
     const quarterPath = await f.locator('#responseCurrent').getAttribute('d');
@@ -42,16 +44,21 @@ test('loudness displays live compensation and keeps server preset mutations scop
     await expect(f.locator('#responseCurrent')).toHaveAttribute('d', maxPath);
     bridgeConnected = false;
     await expect(f.locator('#responseStatus')).toContainText('unavailable');
+    await expect(f.locator('#bridgeState')).toHaveText('Bridge off');
     await expect(f.locator('#responseCurrent')).not.toHaveAttribute('d');
 
     await f.locator('#toggle').click();
     await expect(f.locator('#toggle')).toHaveAttribute('aria-pressed', 'false');
     await expect(f.locator('#responseStatus')).toHaveText('Loudness off · flat response');
+    await expect(f.locator('#compensation')).toHaveText('Off');
     model.assertOnlyLoudnessChanged(original, await dsp('GetConfigJson'));
 
     await f.locator('#toggle').click();
     await expect(f.locator('#toggle')).toHaveAttribute('aria-pressed', 'true');
     model.assertOnlyLoudnessChanged(original, await dsp('GetConfigJson'));
+    await expect(f.locator('#mappingDetails')).not.toHaveAttribute('open');
+    await f.locator('#mappingDetails summary').click();
+    await expect(f.locator('#mappingDetails')).toHaveAttribute('open');
     await f.locator('#startDb').fill('-12');
     await f.locator('#saveCurve').click();
     await expect.poll(async () =>

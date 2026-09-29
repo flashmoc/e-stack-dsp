@@ -178,30 +178,33 @@
     );
     const [p, s, b] = results;
     live = p.status === "fulfilled" ? p.value : null;
-    $("state").textContent = live ? "Live DSP" : "DSP unavailable";
-    $("dspState").textContent = live ? "Connected" : "Unavailable";
+    $("state").textContent = live ? "" : "DSP unavailable";
     $("presetName").textContent = live?.preset?.toUpperCase() || "—";
     if (s.status === "fulfilled") {
       curve = s.value.curve;
+      $("curveSummary").textContent = `Start ${curve.startDb} → full ${curve.fullDb} dB`;
       if (!dirty)
         for (const k of ["startDb", "fullDb", "power"]) $(k).value = curve[k];
       draw();
+    } else {
+      $("curveSummary").textContent = "Settings unavailable";
     }
     const bridge = b.status === "fulfilled" ? b.value : null;
     lastBridge = bridge;
-    $("bridgeState").textContent = bridge?.serviceAlive
-      ? bridge.state
-      : "Offline";
-    $("wiimState").textContent =
-      bridge?.serviceAlive && bridge.wiimConnected
-        ? "Connected"
-        : "Unavailable";
-    $("bridgeDetail").textContent = bridge?.serviceAlive
-      ? "Running"
-      : "Not running";
-    $("bridgeReason").textContent = bridge?.reason || "";
+    $("bridgeState").textContent = !bridge
+      ? "Unavailable"
+      : !bridge.serviceAlive
+        ? "Bridge off"
+        : !bridge.wiimConnected
+          ? "WiiM offline"
+          : !bridge.camillaConnected
+            ? "DSP link lost"
+            : "Connected";
+    $("bridgeState").title = bridge?.reason || "";
     $("compensation").textContent =
-      bridge?.connected && Number.isFinite(bridge.compensationFactor)
+      live && !live.enabled
+        ? "Off"
+        : bridge?.connected && Number.isFinite(bridge.compensationFactor)
         ? (bridge.compensationFactor * 100).toFixed(0) + " %"
         : "—";
     drawResponse(bridge);

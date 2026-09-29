@@ -1,3 +1,29 @@
+.loudness-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+}
+
+.loudness-summary-item {
+  display: grid;
+  gap: 3px;
+}
+
+.loudness-summary-item small {
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+
+.loudness-summary-item strong {
+  font: 17px var(--font-family-data, monospace);
+}
+
+.loudness-summary #toggle {
+  white-space: nowrap;
+}
+
 .loudness-response {
   padding: 18px 20px 12px;
 }
@@ -101,7 +127,74 @@
   color: #59d5e3;
 }
 
+.loudness-mapping {
+  padding: 0;
+}
+
+.loudness-mapping summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 62px;
+  padding: 12px 20px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+}
+
+.loudness-mapping summary::-webkit-details-marker {
+  display: none;
+}
+
+.loudness-mapping summary::after {
+  content: "+";
+  margin-left: auto;
+  color: #59d5e3;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.loudness-mapping details[open] summary::after {
+  content: "−";
+}
+
+#curveSummary {
+  font-weight: 400;
+}
+
+.loudness-mapping .mapping-description,
+.loudness-mapping .surface-chart,
+.loudness-mapping #curveForm {
+  margin-inline: 20px;
+}
+
+.loudness-mapping .mapping-description {
+  margin-block: 0 12px;
+}
+
+.loudness-mapping .surface-chart {
+  width: calc(100% - 40px);
+}
+
+.loudness-mapping #curveForm {
+  padding-bottom: 20px;
+}
+
+.loudness-mapping .surface-fields {
+  margin-block: 12px;
+}
+
 @media (max-width: 700px) {
+  .loudness-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .loudness-summary #toggle {
+    width: 100%;
+  }
+
   .loudness-response {
     padding: 16px 12px 12px;
   }
@@ -124,5 +217,30 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .loudness-mapping summary {
+    flex-wrap: wrap;
+    gap: 3px 10px;
+    padding-inline: 12px;
+  }
+
+  #curveSummary {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .loudness-mapping summary::after {
+    order: 1;
+  }
+
+  .loudness-mapping .mapping-description,
+  .loudness-mapping .surface-chart,
+  .loudness-mapping #curveForm {
+    margin-inline: 12px;
+  }
+
+  .loudness-mapping .surface-chart {
+    width: calc(100% - 24px);
   }
 }
