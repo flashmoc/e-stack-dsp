@@ -51,12 +51,16 @@ model define that range; the UI and service use it. Gain mutation
 readback also rejects a changed gain outside this range or step. Reading an older
 configuration never silently rewrites its gain.
 
-MID L/R and HIGH L/R Gain links use the same browser-local choices as Control
-(`estack.control.link.mid` and `.high`, linked by default). The link applies to
-the next Gain adjustment, not to mute, polarity, delay, PEQ or protection. A
-linked adjustment updates both existing Gain filters in one guarded config
-transaction and verifies both values on readback. Toggling a link alone makes
-no DSP write and does not silently synchronize different current values.
+MID L/R and HIGH L/R processing links use the same browser-local pair choices
+as Control (`estack.control.link.mid` and `.high`, linked by default). In Output
+Processing the link applies to the next Gain, Delay, phase trim and PEQ edit.
+It also applies to crossover edits: the canonical MID and HIGH crossover
+filters are already shared, while independently named edges are updated as a
+verified pair. Each linked edit is one guarded config transaction with readback
+for both ways. PEQ add, value/type change, enable/disable, reset and delete
+act on the same slot on both ways. Toggling a link alone makes no DSP write and
+does not silently synchronize different current values. Mute, polarity and
+hard limiter remain independent per way; Control continues to link Gain only.
 
 Per-way delay changes only the existing Delay filter’s `parameters.delay`:
 `0…100 ms`, step `0.01 ms`. Its `unit` and `subsample` properties are
@@ -156,7 +160,8 @@ fake analyzer or apply/revert model.
 ## Frontend rendering and calibration workspace
 
 The Output frontend places a compact six-way selection rail beneath the wide
-response plot, aligned with the Input EQ band rail, and uses a
+response plot, aligned with the Input EQ band rail. Pair link controls sit next
+to System Edit, leaving the selection rail without an extra heading. It uses a
 horizontal Gain / Delay / Phase alignment row. Gain and phase have sliders plus
 exact fields; delay has an exact field and four millisecond nudges. PEQ uses
 stable horizontal rows with frequency/gain/Q entry. HPF and LPF have logarithmic

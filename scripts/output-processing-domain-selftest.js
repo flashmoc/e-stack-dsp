@@ -41,9 +41,10 @@ function demoTopology() {
     ]
   };
 }
-function create(config) {
+function create(config, alterReadback = null) {
+  let wrote = false;
   const context = { window: {}, console, JSON, Math, Set, Object, Array, Number, String, Promise };
-  context.window.EStackDSPBridge = { mode: 'camillanode', async command(payload) { const name = typeof payload === 'string' ? payload : Object.keys(payload)[0]; if (name === 'GetConfigJson') return clone(config); if (name === 'SetConfigJson') { config = JSON.parse(payload.SetConfigJson); return true; } throw new Error(`Unexpected ${name}`); } };
+  context.window.EStackDSPBridge = { mode: 'camillanode', async command(payload) { const name = typeof payload === 'string' ? payload : Object.keys(payload)[0]; if (name === 'GetConfigJson') { const result = clone(config); return wrote && alterReadback ? alterReadback(result) : result; } if (name === 'SetConfigJson') { config = JSON.parse(payload.SetConfigJson); wrote = true; return true; } throw new Error(`Unexpected ${name}`); } };
   context.window.EStackDSPBridge.api = async (url, options) => {
     assert.equal(url, '/api/output-protection');
     const { channel, clip } = JSON.parse(options.body);
@@ -96,6 +97,71 @@ function create(config) {
     assert.deepStrictEqual(get(), original);
   }
   await assert.rejects(() => service.setLinkedGain(0, -8), /Only MID/);
+
+  const stereo = create(demoTopology());
+  const stereoOriginal = stereo.get();
+  await stereo.service.setLinkedDelay(3, 1.25);
+  assert.strictEqual(stereo.get().filters.mid_l_delay.parameters.delay, 1.25);
+  assert.strictEqual(stereo.get().filters.mid_r_delay.parameters.delay, 1.25);
+  const illegalLinkedDelay = stereo.get(); illegalLinkedDelay.filters.sub_gain.parameters.gain = 1;
+  assert.throws(() => stereo.model.assertLinkedWayMutation(stereoOriginal, illegalLinkedDelay, 2, 'delay', { target: 1.25 }), /unexpectedly/);
+  await stereo.service.setLinkedDelay(2, .4);
+  await stereo.service.setLinkedPhase(2, -30);
+  assert.strictEqual(stereo.model.phaseDegrees(stereo.get(), 2), -30);
+  assert.strictEqual(stereo.model.phaseDegrees(stereo.get(), 3), -30);
+  await stereo.service.setLinkedPhase(3, 0);
+  assert.strictEqual(stereo.get().filters.ESTACK_PHASE_CH2, undefined);
+  assert.strictEqual(stereo.get().filters.ESTACK_PHASE_CH3, undefined);
+  await stereo.service.setLinkedCrossover(3, 'hpf', { freq: 301 });
+  assert.strictEqual(stereo.get().filters.mid_hpf_300_lr24.parameters.freq, 301);
+  await stereo.service.setLinkedCrossover(2, 'hpf', { freq: 300 });
+  const addedPair = await stereo.service.addLinkedPeq(2, { 2: [], 3: [] });
+  assert.strictEqual(addedPair.createdSlot, 0);
+  await stereo.service.setLinkedPeq(3, 0, { freq: 710, gain: 2, q: 1.2 }, { 2: [], 3: [] });
+  for (const channel of [2, 3]) {
+    assert.deepStrictEqual(stereo.get().filters[stereo.model.peqName(channel, 0)].parameters, { type: 'Peaking', freq: 710, gain: 2, q: 1.2 });
+    assert.ok(stereo.model.outputStage(stereo.get(), channel).step.names.includes(stereo.model.peqName(channel, 0)));
+  }
+  await stereo.service.setLinkedPeq(2, 0, {}, { 2: [0], 3: [0] });
+  for (const channel of [2, 3]) assert.ok(!stereo.model.outputStage(stereo.get(), channel).step.names.includes(stereo.model.peqName(channel, 0)));
+  await stereo.service.resetLinkedPeq(2, 0, { 2: [], 3: [] });
+  await stereo.service.deleteLinkedPeq(2, 0, { 2: [], 3: [] });
+  assert.deepStrictEqual(stereo.get(), stereoOriginal, 'linked processing round trip did not restore the exact configuration');
+
+  const highStereo = create(demoTopology());
+  const highOriginal = highStereo.get();
+  await highStereo.service.setLinkedDelay(5, .87);
+  assert.strictEqual(highStereo.get().filters.high_l_delay.parameters.delay, .87);
+  assert.strictEqual(highStereo.get().filters.high_r_delay.parameters.delay, .87);
+  await highStereo.service.setLinkedDelay(4, .5);
+  await highStereo.service.setLinkedPhase(5, -20);
+  assert.strictEqual(highStereo.model.phaseDegrees(highStereo.get(), 4), -20);
+  assert.strictEqual(highStereo.model.phaseDegrees(highStereo.get(), 5), -20);
+  await highStereo.service.setLinkedPhase(4, 0);
+  await highStereo.service.setLinkedCrossover(4, 'hpf', { freq: 2001 });
+  await highStereo.service.setLinkedCrossover(5, 'hpf', { freq: 2000 });
+  await highStereo.service.addLinkedPeq(5, { 4: [], 5: [] });
+  await highStereo.service.setLinkedPeq(4, 0, { gain: -2 }, { 4: [], 5: [] });
+  assert.strictEqual(highStereo.get().filters.USER_CH4_PEQ_01.parameters.gain, -2);
+  assert.strictEqual(highStereo.get().filters.USER_CH5_PEQ_01.parameters.gain, -2);
+  await highStereo.service.deleteLinkedPeq(4, 0, { 4: [], 5: [] });
+  assert.deepStrictEqual(highStereo.get(), highOriginal, 'linked HIGH round trip did not restore the exact configuration');
+
+  const separateEdges = demoTopology();
+  separateEdges.filters.mid_r_hpf = clone(separateEdges.filters.mid_hpf_300_lr24);
+  separateEdges.pipeline.find(step => step.type === 'Filter' && step.channels?.[0] === 3).names[0] = 'mid_r_hpf';
+  const separate = create(separateEdges);
+  await separate.service.setLinkedCrossover(2, 'hpf', { freq: 315 });
+  assert.strictEqual(separate.get().filters.mid_hpf_300_lr24.parameters.freq, 315);
+  assert.strictEqual(separate.get().filters.mid_r_hpf.parameters.freq, 315);
+  await separate.service.setLinkedCrossover(3, 'hpf', { freq: 300 });
+  assert.deepStrictEqual(separate.get(), separateEdges, 'distinct linked crossover filters did not round trip');
+  const changedReadback = create(demoTopology(), config => {
+    config.filters.USER_CH2_PEQ_01.parameters.gain = .1;
+    config.filters.USER_CH3_PEQ_01.parameters.gain = .1;
+    return config;
+  });
+  await assert.rejects(() => changedReadback.service.addLinkedPeq(2, { 2: [], 3: [] }), /Linked output processing readback differs/);
 
   let before = get(); const midRefs = before.pipeline.filter(step => step.type === 'Filter' && [2, 3].includes(step.channels?.[0])).map(step => clone(step.names));
   await service.setCrossover(2, 'hpf', { freq: 301, family: 'LinkwitzRiley', slope: 24 }); let changed = get();

@@ -73,7 +73,7 @@ for (const width of [390, 768, 1920]) {
   });
 }
 
-test('compact way rail follows the graph and Gain links remain pair-scoped', async ({ page, request }) => {
+test('compact way rail follows the graph and stereo links remain pair-scoped', async ({ page, request }) => {
   await requireDemoRuntime(request);
   const original = await dspCommand('GetConfigJson');
   await page.setViewportSize({ width: 390, height: 844 });
@@ -88,8 +88,10 @@ test('compact way rail follows the graph and Gain links remain pair-scoped', asy
     expect(layout.graphTop).toBeLessThan(480);
     expect(layout.railTop).toBeGreaterThanOrEqual(layout.graphBottom);
     expect(layout.overflow).toBe(false);
-    await expect(frame.locator('[data-gain-link="mid"]')).toHaveAttribute('aria-pressed', 'true');
-    await expect(frame.locator('[data-gain-link="high"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(frame.locator('.output-toolbar [data-processing-link]')).toHaveCount(2);
+    await expect(frame.locator('.way-strip .section-kicker')).toHaveCount(0);
+    await expect(frame.locator('[data-processing-link="mid"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(frame.locator('[data-processing-link="high"]')).toHaveAttribute('aria-pressed', 'true');
     await frame.locator('#systemEdit').click();
     await frame.locator('[data-way-channel="2"]').click();
     await frame.locator('[data-value="gain"]').fill('-8.7');
@@ -103,8 +105,8 @@ test('compact way rail follows the graph and Gain links remain pair-scoped', asy
     scoped.filters.mid_l_gain.parameters.gain = original.filters.mid_l_gain.parameters.gain;
     scoped.filters.mid_r_gain.parameters.gain = original.filters.mid_r_gain.parameters.gain;
     expect(scoped).toEqual(original);
-    await frame.locator('[data-gain-link="mid"]').click();
-    await expect(frame.locator('[data-gain-link="mid"]')).toHaveAttribute('aria-pressed', 'false');
+    await frame.locator('[data-processing-link="mid"]').click();
+    await expect(frame.locator('[data-processing-link="mid"]')).toHaveAttribute('aria-pressed', 'false');
     expect(await dspCommand('GetConfigJson')).toEqual(linked);
     await frame.locator('[data-value="gain"]').fill('-8.6');
     await frame.locator('[data-value="gain"]').press('Tab');
@@ -112,6 +114,97 @@ test('compact way rail follows the graph and Gain links remain pair-scoped', asy
       const config = await dspCommand('GetConfigJson');
       return [config.filters.mid_l_gain.parameters.gain, config.filters.mid_r_gain.parameters.gain];
     }).toEqual([-8.6, -8.7]);
+  } finally {
+    const current = await dspCommand('GetConfigJson');
+    if (JSON.stringify(current) !== JSON.stringify(original)) await dspCommand({ SetConfigJson: JSON.stringify(original) });
+    expect(await dspCommand('GetConfigJson')).toEqual(original);
+  }
+});
+
+test('linked MID edits synchronize delay, phase, crossover and PEQ with exact restore', async ({ page, request }) => {
+  await requireDemoRuntime(request);
+  const original = await dspCommand('GetConfigJson');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/estack-dsp/?transport=camillanode#output-processing');
+  const frame = await outputFrame(page);
+  try {
+    await expect(frame.locator('[data-processing-link="mid"]')).toHaveAttribute('aria-pressed', 'true');
+    await frame.locator('#systemEdit').click();
+    await frame.locator('[data-way-channel="2"]').click();
+    await frame.locator('[data-value="delay"]').fill('1.23');
+    await frame.locator('[data-value="delay"]').press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters.mid_l_delay.parameters.delay, config.filters.mid_r_delay.parameters.delay];
+    }).toEqual([1.23, 1.23]);
+    await frame.locator('[data-processing-link="mid"]').click();
+    await frame.locator('[data-value="delay"]').fill('1.24');
+    await frame.locator('[data-value="delay"]').press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters.mid_l_delay.parameters.delay, config.filters.mid_r_delay.parameters.delay];
+    }).toEqual([1.24, 1.23]);
+    await frame.locator('[data-processing-link="mid"]').click();
+    await frame.locator('[data-value="delay"]').fill('1.23');
+    await frame.locator('[data-value="delay"]').press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters.mid_l_delay.parameters.delay, config.filters.mid_r_delay.parameters.delay];
+    }).toEqual([1.23, 1.23]);
+
+    await frame.locator('[data-value="phase"]').fill('-30');
+    await frame.locator('[data-value="phase"]').press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters.ESTACK_PHASE_CH2?.description, config.filters.ESTACK_PHASE_CH3?.description];
+    }).toEqual([expect.stringContaining('-30.0 deg'), expect.stringContaining('-30.0 deg')]);
+
+    const hpf = original.filters.mid_hpf_300_lr24.parameters.freq;
+    await frame.locator('[data-xo-freq="hpf"]').fill(String(hpf + 1));
+    await frame.locator('[data-xo-freq="hpf"]').press('Tab');
+    await expect.poll(async () => (await dspCommand('GetConfigJson')).filters.mid_hpf_300_lr24.parameters.freq).toBe(hpf + 1);
+
+    const slot = Array.from({ length: 10 }, (_, index) => index).find(index => [2, 3].every(channel => !original.filters[`USER_CH${channel}_PEQ_${String(index + 1).padStart(2, '0')}`]));
+    expect(slot).toBeDefined();
+    await frame.locator('#addPeq').click();
+    await expect(frame.locator(`[data-peq-slot="${slot}"]`)).toHaveCount(1);
+    await frame.locator(`[data-peq-field="freq"][data-slot="${slot}"]`).fill('710');
+    await frame.locator(`[data-peq-field="freq"][data-slot="${slot}"]`).press('Tab');
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).fill('2');
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [2, 3].map(channel => config.filters[`USER_CH${channel}_PEQ_${String(slot + 1).padStart(2, '0')}`]?.parameters);
+    }).toEqual([expect.objectContaining({ freq: 710, gain: 2 }), expect.objectContaining({ freq: 710, gain: 2 })]);
+    await frame.locator(`[data-peq-toggle="${slot}"]`).click();
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [2, 3].map(channel => stage(config, channel, entry => entry.names.includes(channel === 2 ? 'mid_l_gain' : 'mid_r_gain')).names.includes(`USER_CH${channel}_PEQ_${String(slot + 1).padStart(2, '0')}`));
+    }).toEqual([false, false]);
+
+    await frame.locator(`[data-peq-delete="${slot}"]`).click();
+    await frame.locator('[data-value="phase"]').fill('0');
+    await frame.locator('[data-value="phase"]').press('Tab');
+    await frame.locator('[data-value="delay"]').fill(String(original.filters.mid_l_delay.parameters.delay));
+    await frame.locator('[data-value="delay"]').press('Tab');
+    await frame.locator('[data-xo-freq="hpf"]').fill(String(hpf));
+    await frame.locator('[data-xo-freq="hpf"]').press('Tab');
+    const expectedAfterZeroPhase = clone(original);
+    for (const channel of [2, 3]) {
+      const name = `ESTACK_PHASE_CH${channel}`;
+      delete expectedAfterZeroPhase.filters[name];
+      stage(expectedAfterZeroPhase, channel, entry => entry.names.includes(channel === 2 ? 'mid_l_gain' : 'mid_r_gain')).names =
+        stage(expectedAfterZeroPhase, channel, entry => entry.names.includes(channel === 2 ? 'mid_l_gain' : 'mid_r_gain')).names.filter(item => item !== name);
+    }
+    expectedAfterZeroPhase.filters.mid_r_delay.parameters.delay = original.filters.mid_l_delay.parameters.delay;
+    await expect.poll(async () => await dspCommand('GetConfigJson')).toEqual(expectedAfterZeroPhase);
+    await frame.locator('[data-way-channel="5"]').click();
+    await frame.locator('[data-value="delay"]').fill('0.75');
+    await frame.locator('[data-value="delay"]').press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters.high_l_delay.parameters.delay, config.filters.high_r_delay.parameters.delay];
+    }).toEqual([.75, .75]);
   } finally {
     const current = await dspCommand('GetConfigJson');
     if (JSON.stringify(current) !== JSON.stringify(original)) await dspCommand({ SetConfigJson: JSON.stringify(original) });

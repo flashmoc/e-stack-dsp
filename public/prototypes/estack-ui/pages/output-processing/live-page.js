@@ -24,13 +24,17 @@
   const disabledSlots = channel => model.PEQ_DEFAULT_FREQUENCIES.map((_, slot) => slot).filter(slot => localStorage.getItem(disabledKey(channel, slot)) === 'true');
   const setDisabled = (channel, slot, value) => value ? localStorage.setItem(disabledKey(channel, slot), 'true') : localStorage.removeItem(disabledKey(channel, slot));
   const selected = () => latest?.ways?.find(item => item.channel === selectedChannel);
-  const gainLinks = {
+  const wayLinks = {
     mid: localStorage.getItem('estack.control.link.mid') !== 'false',
     high: localStorage.getItem('estack.control.link.high') !== 'false'
   };
-  const gainPair = channel => [2, 3].includes(channel) ? 'mid' : [4, 5].includes(channel) ? 'high' : null;
-  const gainPartner = channel => channel === 2 ? 3 : channel === 3 ? 2 : channel === 4 ? 5 : channel === 5 ? 4 : null;
-  const gainLinked = channel => !!gainLinks[gainPair(channel)];
+  const wayPair = channel => [2, 3].includes(channel) ? 'mid' : [4, 5].includes(channel) ? 'high' : null;
+  const wayPartner = channel => channel === 2 ? 3 : channel === 3 ? 2 : channel === 4 ? 5 : channel === 5 ? 4 : null;
+  const wayLinked = channel => !!wayLinks[wayPair(channel)];
+  function pairedDisabled(channel, slot, off) {
+    return Object.fromEntries(model.linkedPair(channel).map(item => [item, disabledSlots(item).filter(value => value !== slot).concat(off ? [slot] : [])]));
+  }
+  function savePairedDisabled(channel, slot, off) { model.linkedPair(channel).forEach(item => setDisabled(item, slot, off)); }
   const locked = () => !editing || busy;
   const status = (text, kind = '') => { $('#outputState').textContent = text; $('#outputState').className = `ui-status ${kind ? `is-${kind}` : ''}`; };
   const text = (selector, value) => { const el = $(selector); if (el && el.textContent !== String(value)) el.textContent = value; };
@@ -85,14 +89,14 @@
     $('#systemEdit').setAttribute('aria-pressed', String(editing));
     text('#systemEdit', editing ? 'System Edit · UNLOCKED' : 'System Edit · LOCKED');
     text('#editState', busy ? 'COMMITTING' : editing ? 'EDITING' : 'LOCKED');
-    text('#sharedState', editing ? 'LIVE EDITING' : 'READ ONLY');
     $$('[data-mutation]').forEach(el => {
       // readOnly keeps the active numerical field focused through readback.
       el.disabled = !editing;
       if (el.matches('input[type=number]')) el.readOnly = busy && !el.matches(queueable);
       el.setAttribute('aria-disabled', String(!editing || (busy && !el.matches(`${queueable},[data-nudge]`))));
     });
-    $('#addPeq').disabled = locked() || (selected()?.peq.filter(Boolean).length || 0) >= 10;
+    const noSharedSlot = selected() && wayLinked(selectedChannel) && model.PEQ_DEFAULT_FREQUENCIES.every((_, slot) => model.linkedPair(selectedChannel).some(item => latest.ways[item].peq[slot]));
+    $('#addPeq').disabled = locked() || !!noSharedSlot || (selected()?.peq.filter(Boolean).length || 0) >= 10;
   }
   function updateSelector() {
     if (!$('#waySelector').children.length) {
@@ -107,11 +111,11 @@
       el.querySelector('.way-detail').textContent = `${g.mute ? 'MUTED' : 'ON'} · ${Number(w.delay.filter.parameters.delay).toFixed(2)} ms${g.inverted ? ' · INV' : ''}`;
       el.classList.toggle('is-muted', !!g.mute);
     });
-    $$('[data-gain-link]').forEach(button => {
-      const pair = button.dataset.gainLink, linked = gainLinks[pair];
+    $$('[data-processing-link]').forEach(button => {
+      const pair = button.dataset.processingLink, linked = wayLinks[pair];
       button.setAttribute('aria-pressed', String(linked));
       button.textContent = `${pair.toUpperCase()} L/R · ${linked ? 'LINKED' : 'FREE'}`;
-      button.title = 'Gain only · applies to the next adjustment';
+      button.title = 'Links crossover, gain, phase, delay and PEQ edits';
     });
   }
   function createPeqRow(slot) {
@@ -218,37 +222,48 @@
         const current = {gain:item.gain.filter.parameters.gain, delay:item.delay.filter.parameters.delay, phase:model.phaseDegrees(latest.config,channel), limiter:item.limiter.filter.parameters.clip_limit}[id];
         // Native blur can follow an explicit change on the same field. Never
         // start a second transaction for an already acknowledged value.
-        const partner = id === 'gain' && gainLinked(channel) ? latest.ways.find(w => w.channel === gainPartner(channel)) : null;
-        if (!pending && next === Number(current) && (!partner || next === Number(partner.gain.filter.parameters.gain))) return;
+        const partner = id !== 'limiter' && wayLinked(channel) ? latest.ways.find(w => w.channel === wayPartner(channel)) : null;
+        const partnerCurrent = partner && (id === 'gain' ? partner.gain.filter.parameters.gain : id === 'delay' ? partner.delay.filter.parameters.delay : model.phaseDegrees(latest.config, partner.channel));
+        if (!pending && next === Number(current) && (!partner || next === Number(partnerCurrent))) return;
         const method = {gain:'setGain', delay:'setDelay', phase:'setPhase', limiter:'setHardLimiter'}[id];
-        const linked = !!partner;
-        return run(() => linked ? service.setLinkedGain(channel, next) : service[method](channel, next), undefined, {queue:true,controls});
+        const linkedMethod = {gain:'setLinkedGain', delay:'setLinkedDelay', phase:'setLinkedPhase'}[id];
+        return run(() => partner ? service[linkedMethod](channel, next) : service[method](channel, next), undefined, {queue:true,controls});
       }
       const edge = el.dataset.xoFamily || el.dataset.xoFreq || el.dataset.xoSlope || el.dataset.xoRange;
       if (edge) {
         const patch = {family:$(`[data-xo-family="${edge}"]`).value, freq:Number($(`[data-xo-freq="${edge}"]`).value), slope:Number($(`[data-xo-slope="${edge}"]`).value)};
         const current = selected().crossover[edge]?.filter.parameters;
-        if (!current || (!pending && patch.freq === current.freq && patch.slope === current.order*6 && patch.family === (/^Butterworth/.test(current.type) ? 'Butterworth' : 'LinkwitzRiley'))) return;
+        const linked = wayLinked(channel);
+        const partner = linked && model.crossovers(latest.config, wayPartner(channel))[edge];
+        const samePartner = !partner || (partner.filter.parameters.freq === patch.freq && partner.filter.parameters.order*6 === patch.slope && (/^Butterworth/.test(partner.filter.parameters.type) ? 'Butterworth' : 'LinkwitzRiley') === patch.family);
+        if (!current || (!pending && patch.freq === current.freq && patch.slope === current.order*6 && patch.family === (/^Butterworth/.test(current.type) ? 'Butterworth' : 'LinkwitzRiley') && samePartner)) return;
         // Patch only the manipulated property, so a queued edit cannot replay
         // obsolete frequency/family/slope values over the preceding readback.
         const field = el.dataset.xoFamily ? 'family' : el.dataset.xoSlope ? 'slope' : 'freq';
-        return run(() => service.setCrossover(channel, edge, {[field]:patch[field]}), undefined, {queue:true,controls});
+        return run(() => linked ? service.setLinkedCrossover(channel, edge, {[field]:patch[field]}) : service.setCrossover(channel, edge, {[field]:patch[field]}), undefined, {queue:true,controls});
       }
       if (el.dataset.peqField || el.dataset.peqSlider || el.dataset.peqType !== undefined) {
         const slot = Number(el.dataset.slot ?? el.dataset.peqType), field = el.dataset.peqField || el.dataset.peqSlider || 'type';
         const next = field === 'type' ? el.value : el.dataset.peqSlider ? peqValue(field,el.value) : Number(el.value);
-        if (selected().peq[slot]?.filter.parameters[field] === next) return;
-        return run(() => service.setPeq(channel, slot, {[field]:next}, disabledSlots(channel)),undefined,{queue:true,controls});
+        const partner = wayLinked(channel) ? latest.ways.find(w => w.channel === wayPartner(channel)) : null;
+        const source = selected().peq[slot]?.filter.parameters;
+        const partnerEntry = partner?.peq[slot]?.filter.parameters;
+        const partnerMatches = partner && partnerEntry && source && model.fingerprint(partnerEntry) === model.fingerprint(source) && disabledSlots(channel).includes(slot) === disabledSlots(partner.channel).includes(slot);
+        if (source?.[field] === next && (!partner || partnerMatches)) return;
+        const off = disabledSlots(channel).includes(slot);
+        return run(() => partner ? service.setLinkedPeq(channel, slot, {[field]:next}, pairedDisabled(channel, slot, off)) : service.setPeq(channel, slot, {[field]:next}, disabledSlots(channel)),
+          () => { if (partner) savePairedDisabled(channel, slot, off); }, {queue:true,controls});
       }
     });
     document.addEventListener('click', e => {
       const el = e.target.closest('button'); if (!el) return;
-      if (el.dataset.gainLink) {
+      if (el.dataset.processingLink) {
         if (busy) return;
-        const pair = el.dataset.gainLink;
-        gainLinks[pair] = !gainLinks[pair];
-        localStorage.setItem(`estack.control.link.${pair}`, String(gainLinks[pair]));
+        const pair = el.dataset.processingLink;
+        wayLinks[pair] = !wayLinks[pair];
+        localStorage.setItem(`estack.control.link.${pair}`, String(wayLinks[pair]));
         updateSelector();
+        syncLock();
         return;
       }
       if (el.dataset.wayChannel !== undefined) {
@@ -261,15 +276,15 @@
       }
       if (el.dataset.nudge && editing) {
         const channel = selectedChannel, delta = Number(el.dataset.delta);
-        return run(() => service.setDelay(channel,clamp(Number(latest.ways.find(w=>w.channel===channel).delay.filter.parameters.delay)+delta,0,100)),undefined,{queue:true});
+        return run(() => (wayLinked(channel) ? service.setLinkedDelay : service.setDelay)(channel,clamp(Number(latest.ways.find(w=>w.channel===channel).delay.filter.parameters.delay)+delta,0,100)),undefined,{queue:true});
       }
       const item = selected(); if (!item || locked()) return; const channel = item.channel;
       if (el.hasAttribute('data-mute')) return run(() => service.setMute(channel, !item.gain.filter.parameters.mute));
       if (el.dataset.polarity !== undefined) return run(() => service.setPolarity(channel, el.dataset.polarity === 'true'));
-      if (el.id === 'addPeq') return run(() => service.addPeq(channel, disabledSlots(channel)), r => {setDisabled(channel,r.createdSlot,false); updateValues(); $(`[data-peq-field="freq"][data-slot="${r.createdSlot}"]`)?.focus({preventScroll:true});});
-      if (el.dataset.peqToggle !== undefined) { const slot = Number(el.dataset.peqToggle), off = !disabledSlots(channel).includes(slot); return run(() => service.setPeq(channel,slot,{},off ? [...disabledSlots(channel),slot] : disabledSlots(channel).filter(s => s !== slot)), () => setDisabled(channel,slot,off)); }
-      if (el.dataset.peqReset !== undefined) return run(() => service.resetPeq(channel,Number(el.dataset.peqReset),disabledSlots(channel)));
-      if (el.dataset.peqDelete !== undefined) return run(() => service.deletePeq(channel,Number(el.dataset.peqDelete),disabledSlots(channel)), () => $('#addPeq').focus({preventScroll:true}));
+      if (el.id === 'addPeq') return run(() => wayLinked(channel) ? service.addLinkedPeq(channel, Object.fromEntries(model.linkedPair(channel).map(item => [item, disabledSlots(item)]))) : service.addPeq(channel, disabledSlots(channel)), r => {if (wayLinked(channel)) savePairedDisabled(channel,r.createdSlot,false); else setDisabled(channel,r.createdSlot,false); updateValues(); $(`[data-peq-field="freq"][data-slot="${r.createdSlot}"]`)?.focus({preventScroll:true});});
+      if (el.dataset.peqToggle !== undefined) { const slot = Number(el.dataset.peqToggle), off = !disabledSlots(channel).includes(slot); return run(() => wayLinked(channel) ? service.setLinkedPeq(channel,slot,{},pairedDisabled(channel,slot,off)) : service.setPeq(channel,slot,{},off ? [...disabledSlots(channel),slot] : disabledSlots(channel).filter(s => s !== slot)), () => wayLinked(channel) ? savePairedDisabled(channel,slot,off) : setDisabled(channel,slot,off)); }
+      if (el.dataset.peqReset !== undefined) { const slot=Number(el.dataset.peqReset), off=disabledSlots(channel).includes(slot); return run(() => wayLinked(channel) ? service.resetLinkedPeq(channel,slot,pairedDisabled(channel,slot,off)) : service.resetPeq(channel,slot,disabledSlots(channel)), () => { if(wayLinked(channel)) savePairedDisabled(channel,slot,off); }); }
+      if (el.dataset.peqDelete !== undefined) { const slot=Number(el.dataset.peqDelete); return run(() => wayLinked(channel) ? service.deleteLinkedPeq(channel,slot,pairedDisabled(channel,slot,false)) : service.deletePeq(channel,slot,disabledSlots(channel)), () => { if(wayLinked(channel)) savePairedDisabled(channel,slot,false); $('#addPeq').focus({preventScroll:true}); }); }
     });
   }
   function renderGraphToolbar() {

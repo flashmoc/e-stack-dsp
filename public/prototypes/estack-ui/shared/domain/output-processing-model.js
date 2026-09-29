@@ -147,6 +147,61 @@
       if (fingerprint(oldFilter) !== fingerprint(nextFilter)) throw new Error('Linked Gain changed outside its permitted parameter.');
     }
   }
+  function linkedPair(channel) {
+    const numeric = Number(channel);
+    if ([2, 3].includes(numeric)) return [2, 3];
+    if ([4, 5].includes(numeric)) return [4, 5];
+    throw new Error('Only MID L/R and HIGH L/R may share processing edits.');
+  }
+  function restoreWayScope(before, after, channel, kind) {
+    const restored = clone(after);
+    const names = kind === 'phase' ? [phaseName(channel)] : kind === 'peq' ? peqNames(channel) : kind === 'delay' ? [entryForType(before, channel, 'Delay').name] : [];
+    for (const name of names) {
+      if (before.filters?.[name]) restored.filters[name] = clone(before.filters[name]);
+      else delete restored.filters[name];
+    }
+    if (kind === 'phase' || kind === 'peq') {
+      const index = outputStage(before, channel).index;
+      restored.pipeline[index] = clone(before.pipeline[index]);
+    }
+    return restored;
+  }
+  function assertLinkedWayMutation(before, after, channel, kind, { target, slot } = {}) {
+    const pair = linkedPair(channel);
+    for (const item of pair) {
+      const other = pair.find(candidate => candidate !== item);
+      const isolated = restoreWayScope(before, after, other, kind);
+      if (kind === 'delay') {
+        assertDelayMutation(before, isolated, item);
+        if (after.filters[entryForType(before, item, 'Delay').name].parameters.delay !== target) throw new Error('Linked Delay readback differs from the requested value.');
+      } else if (kind === 'phase') {
+        assertPhaseMutation(before, isolated, item);
+        if (phaseDegrees(after, item) !== target) throw new Error('Linked phase readback differs from the requested value.');
+      } else if (kind === 'peq') {
+        assertPeqMutation(before, isolated, item);
+      } else throw new Error('Unknown linked processing scope.');
+    }
+    if (kind === 'peq') {
+      const entries = pair.map(item => after.filters?.[peqName(item, slot)]);
+      if (!!entries[0] !== !!entries[1] || (entries[0] && fingerprint(entries[0].parameters) !== fingerprint(entries[1].parameters))) throw new Error('Linked PEQ readback differs between ways.');
+      const active = pair.map(item => outputStage(after, item).step.names.includes(peqName(item, slot)));
+      if (active[0] !== active[1]) throw new Error('Linked PEQ activation differs between ways.');
+    }
+  }
+  function assertLinkedCrossoverMutation(before, after, channel, edge) {
+    const pair = linkedPair(channel);
+    const entries = pair.map(item => crossovers(before, item)[edge]);
+    if (entries.some(entry => !entry)) throw new Error('Linked crossover edge is missing.');
+    if (entries[0].name === entries[1].name) return assertCrossoverMutation(before, after, channel, edge);
+    for (let index = 0; index < pair.length; index++) {
+      const isolated = clone(after);
+      const other = entries[1 - index].name;
+      isolated.filters[other] = clone(before.filters[other]);
+      assertCrossoverMutation(before, isolated, pair[index], edge);
+    }
+    const parameters = entries.map(entry => after.filters[entry.name].parameters);
+    if (fingerprint(parameters[0]) !== fingerprint(parameters[1])) throw new Error('Linked crossover readback differs between ways.');
+  }
   function assertDelayMutation(before, after, channel) { const delay = entryForType(before, channel, 'Delay'); assertParamOnly(before, after, delay.name, 'Delay', ['delay']); }
   function protectionPair(config, channel) {
     const limiter = limiterEntry(config, channel);
@@ -206,5 +261,5 @@
     const xo = Object.values(data.crossover).reduce((sum, item) => sum + crossoverMagnitude(item?.filter, frequency), 0); const peq = data.peq.reduce((sum, item) => sum + (!item || disabled.has(item.slot) ? 0 : peqMagnitude(item.filter, frequency, config.devices?.samplerate)), 0);
     return xo + peq + Number(data.gain.filter.parameters?.gain || 0);
   }
-  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, protectionPair, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertLinkedGainMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
+  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, linkedPair, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, protectionPair, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertLinkedGainMutation, assertLinkedWayMutation, assertLinkedCrossoverMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
 })();
