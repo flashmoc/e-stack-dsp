@@ -86,6 +86,43 @@ async function setSubGainThroughFader(frame, targetGain) {
 }
 
 test.describe('Control live CamillaNode demo', () => {
+    test('compact per-way link buttons share pair state without a DSP write', async ({ page, request }) => {
+        await requireDemoRuntime(request);
+        const original = await dspCommand('GetConfigJson');
+        await page.goto('/estack-dsp/?transport=camillanode#control');
+        const frame = await controlFrame(page);
+        const mid = frame.locator('[data-link-toggle="mid"]');
+        const high = frame.locator('[data-link-toggle="high"]');
+        await expect(mid).toHaveCount(2);
+        await expect(high).toHaveCount(2);
+        const midInitial = await mid.first().getAttribute('aria-pressed');
+        const highInitial = await high.first().getAttribute('aria-pressed');
+        try {
+            await expect(mid.nth(1)).toHaveAttribute('aria-pressed', midInitial);
+            await expect(high.nth(1)).toHaveAttribute('aria-pressed', highInitial);
+            await mid.first().click();
+            const midChanged = midInitial === 'true' ? 'false' : 'true';
+            await expect(mid.first()).toHaveAttribute('aria-pressed', midChanged);
+            await expect(mid.nth(1)).toHaveAttribute('aria-pressed', midChanged);
+            await expect(high.first()).toHaveAttribute('aria-pressed', highInitial);
+            await high.nth(1).click();
+            const highChanged = highInitial === 'true' ? 'false' : 'true';
+            await expect(high.first()).toHaveAttribute('aria-pressed', highChanged);
+            await expect(high.nth(1)).toHaveAttribute('aria-pressed', highChanged);
+            await expect(mid.first()).toHaveAttribute('aria-pressed', midChanged);
+            expect(await dspCommand('GetConfigJson')).toEqual(original);
+        } finally {
+            if ((await mid.first().getAttribute('aria-pressed')) !== midInitial) await mid.first().click();
+            if ((await high.first().getAttribute('aria-pressed')) !== highInitial) await high.first().click();
+        }
+        await expect(mid.nth(1)).toHaveAttribute('aria-pressed', midInitial);
+        await expect(high.nth(1)).toHaveAttribute('aria-pressed', highInitial);
+        expect(await dspCommand('GetConfigJson')).toEqual(original);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(mid.first()).toBeVisible();
+        await mid.first().scrollIntoViewIfNeeded();
+        expect(await frame.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    });
     test('mobile trim survives telemetry and shares shell processing load', async ({ page, request }) => {
         await requireDemoRuntime(request);
         const original = await dspCommand('GetConfigJson');
@@ -145,7 +182,7 @@ test.describe('Control live CamillaNode demo', () => {
         }))).toEqual({ mode: 'camillanode', connected: true, page: 'control' });
         await expect(frame.locator('article.mixer-strip:not(.master-strip)')).toHaveCount(6);
         await expect(frame.locator('article.master-strip')).toHaveCount(1);
-        await expect(frame.locator('[data-link-toggle]')).toHaveCount(2);
+        await expect(frame.locator('[data-link-toggle]')).toHaveCount(4);
             await expect(frame.locator('[data-mute]')).toHaveCount(7);
         await expect(frame.locator('article.mixer-strip').filter({ hasText: 'OUT 7' })).toHaveCount(0);
         await expect(frame.locator('article.mixer-strip').filter({ hasText: 'OUT 8' })).toHaveCount(0);

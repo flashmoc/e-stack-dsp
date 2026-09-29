@@ -88,8 +88,10 @@
   function strip(item, master = false) {
     const key = master ? 'master' : String(item.channel); const gain = master ? latest.master : item.gain; const peak = master ? masterPeak() : wayPeak(item.channel);
     const level = Number.isFinite(peak) ? peak : -60; const muted = master ? latest.masterMuted : item.muted; const headroom = master ? null : wayHeadroom(item.channel); const protection = protectionState(headroom); const min = -60; const max = master ? 0 : 6; const step = master ? '.5' : '.1'; const locked = isWayLocked(key);
+    const pair = !master && item.channel >= 2 && item.channel < 6 ? (item.channel < 4 ? 'mid' : 'high') : null;
+    const link = pair ? `<button class="strip-pair-link" data-link-toggle="${pair}" type="button" aria-pressed="${latest.links[pair]}" aria-label="${model.LINK_DEFINITIONS[pair].label} gain link, ${latest.links[pair] ? 'linked' : 'free'}" title="Links gain changes for ${model.LINK_DEFINITIONS[pair].label}">${latest.links[pair] ? 'LINKED' : 'FREE'}</button>` : '';
     return `<article class="mixer-strip${master ? ' master-strip' : ''}${muted ? ' is-muted' : ''} way-${master ? 'master' : item.id}" ${master ? '' : `data-protection="${protection}"`} style="--way:${master ? 'var(--color-accent)' : item.color}">
-      <header><div><strong>${master ? 'MASTER' : item.name}</strong><span>${master ? 'LOUDEST OUTPUT' : `OUT ${item.channel + 1} · POST LIMIT`}</span></div><output data-meter-readout="${key}">${muted ? '−∞' : formatDb(level, 'dBFS')}</output></header>
+      <header><div><strong>${master ? 'MASTER' : item.name}</strong>${link}<span>${master ? 'LOUDEST OUTPUT' : `OUT ${item.channel + 1} · POST LIMIT`}</span></div><output data-meter-readout="${key}">${muted ? '−∞' : formatDb(level, 'dBFS')}</output></header>
       <div class="legacy-meter-console calibrated-meter"><div class="legacy-dbfs-scale">${meterScale.map(mark => `<span style="top:${axis(mark, 0)}%">${mark}</span>`).join('')}</div><div class="legacy-meter-core" data-fader-core="${key}" role="slider" tabindex="${locked ? '-1' : '0'}" aria-disabled="${locked}" aria-label="${master ? 'Master level' : `${item.name} gain`}" aria-valuemin="${min}" aria-valuemax="${max}" aria-valuenow="${gain}"><div class="legacy-meter-track"><i class="legacy-meter-fill" data-meter-fill="${key}" style="clip-path:inset(${peakPosition(muted ? -60 : level)}% 0 0)"></i><b class="legacy-meter-peak" data-meter-peak="${key}" style="top:${peakPosition(muted ? -60 : level)}%"></b></div><div class="legacy-gain-rail"></div><input class="mixer-fader legacy-fader-input" data-fader="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${gain}" ${locked ? 'disabled' : ''}><div class="legacy-fader-handle" style="top:${axis(gain,max)}%"></div><div class="legacy-gain-scale">${(master ? [0,-12,-24,-36,-48,-60] : [6,0,-12,-24,-36,-48,-60]).map(mark => `<span class="gain-tick ${mark === 0 ? 'unity' : ''} " style="top:${axis(mark,max)}%">${mark > 0 ? `+${mark}` : mark}</span>`).join('')}</div></div></div>
       <div class="strip-value"><input class="ui-number" data-number="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(gain).toFixed(1)}" ${locked ? 'disabled' : ''}><span>dB</span></div>
       <div class="nudge-row"><button data-nudge="${key}" data-delta="-1" type="button" ${locked ? 'disabled' : ''}>−1</button><button data-nudge="${key}" data-delta="${master ? '-.5' : '-.2'}" type="button" ${locked ? 'disabled' : ''}>${master ? '−0.5' : '−0.2'}</button><button data-nudge="${key}" data-delta="${master ? '.5' : '.2'}" type="button" ${locked ? 'disabled' : ''}>${master ? '+0.5' : '+0.2'}</button><button data-nudge="${key}" data-delta="1" type="button" ${locked ? 'disabled' : ''}>+1</button></div>
@@ -97,7 +99,7 @@
       <button class="mute-button" data-mute="${key}" type="button" aria-label="${master ? 'Master' : item.name} mute" aria-pressed="${muted}">${muted ? 'MUTED' : 'MUTE'}</button>
     </article>`;
   }
-  function pairs(key, left, right) { const label = model.LINK_DEFINITIONS[key].label; return `<section class="channel-pair channel-pair-${key}">${strip(left)}${strip(right)}<button class="pair-link" data-link-toggle="${key}" type="button" aria-pressed="${latest.links[key]}">${label} · ${latest.links[key] ? 'LINKED' : 'FREE'}</button></section>`; }
+  function pairs(key, left, right) { return `<section class="channel-pair channel-pair-${key}">${strip(left)}${strip(right)}</section>`; }
   function mixer() {
     if ($('#controlMixer').children.length) { updateMixer(); return; }
     const ways = latest.ways; const by = channel => ways.find(item => item.channel === channel);
@@ -135,7 +137,7 @@
         const status=card.querySelector('.strip-protection');status.dataset.state=protection;status.querySelector('strong').textContent=protectionLabel(room);
       }
     });
-    document.querySelectorAll('[data-link-toggle]').forEach(el=>{const key=el.dataset.linkToggle;el.disabled=busy;el.setAttribute('aria-pressed',String(latest.links[key]));el.textContent=`${model.LINK_DEFINITIONS[key].label} · ${latest.links[key]?'LINKED':'FREE'}`;});
+    document.querySelectorAll('[data-link-toggle]').forEach(el=>{const key=el.dataset.linkToggle;el.disabled=busy;el.setAttribute('aria-pressed',String(latest.links[key]));el.setAttribute('aria-label',`${model.LINK_DEFINITIONS[key].label} gain link, ${latest.links[key]?'linked':'free'}`);el.textContent=latest.links[key]?'LINKED':'FREE';});
   }
   function previewGain(core, key, value) {
     if (!core || isWayLocked(key)) return;

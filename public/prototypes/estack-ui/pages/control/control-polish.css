@@ -42,7 +42,13 @@
 .control-heading span { padding-left:12px; border-left:1px solid var(--color-border-subtle); color:var(--color-muted); font-size:11px; }
 .control-page .channel-pair { padding-bottom:0; align-items:stretch; }
 .control-page .channel-pair .mixer-strip { padding-bottom:16px; }
-.control-page .pair-link { position:static; transform:none; grid-column:1/-1; justify-self:stretch; width:auto; margin:8px 12px 12px; min-height:44px; background:var(--color-control); font-size:11px; }
+.control-page .channel-pair .mixer-strip header { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:1px; height:55px; min-height:55px; padding:5px 3px 4px; }
+.control-page .channel-pair .mixer-strip header>div { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
+.control-page .channel-pair .mixer-strip header output { align-self:flex-end; min-width:0; line-height:12px; }
+.control-page .strip-pair-link { flex:none; min-width:54px; min-height:24px; padding:2px 5px; border:1px solid rgba(var(--pair),.58); border-radius:3px; background:rgba(var(--pair),.12); color:rgb(var(--pair)); font:800 8px var(--font-family-data); letter-spacing:.025em; cursor:pointer; }
+.control-page .strip-pair-link[aria-pressed="false"] { color:#9db0b4; border-color:rgba(255,255,255,.24); background:rgba(255,255,255,.035); }
+.control-page .strip-pair-link:hover:not(:disabled),.control-page .strip-pair-link:focus-visible { border-color:rgb(var(--pair)); background:rgba(var(--pair),.22); }
+.control-page .strip-pair-link:disabled { opacity:.45; cursor:default; }
 .control-page .channel-pair { border-radius:6px; overflow:hidden; }
 .control-page .mixer-strip { border-radius:5px; }
 @media(max-width:700px) {
@@ -51,6 +57,8 @@
   .control-heading span { display:none; }
   .control-page .console-bank { gap:12px; }
   .control-page .channel-pair { gap:0; }
+  .control-page .channel-pair .mixer-strip header { height:66px; min-height:66px; }
+  .control-page .strip-pair-link { min-height:34px; }
   .control-page .mixer-actions { padding:12px; }
 }
 
