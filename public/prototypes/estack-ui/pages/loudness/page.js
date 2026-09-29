@@ -145,9 +145,29 @@
       .forEach(
         (el) => (el.disabled = busy || !live || B.mode !== "camillanode"),
       );
-    $("toggle").textContent = live?.enabled
-      ? "Disable loudness"
-      : "Enable loudness";
+    const mode = $("loudnessMode");
+    mode.dataset.state = !live
+      ? "unknown"
+      : !live.enabled
+        ? "off"
+        : lastBridge?.connected
+          ? "ready"
+          : "degraded";
+    mode.textContent = !live
+      ? "UNKNOWN"
+      : !live.enabled
+        ? "OFF"
+        : lastBridge?.connected
+          ? "ON"
+          : "ON · LINK DOWN";
+    mode.setAttribute("aria-label", !live
+      ? "Loudness state unavailable"
+      : !live.enabled
+        ? "Loudness is off"
+        : lastBridge?.connected
+          ? "Loudness is on and the WiiM link is connected"
+          : "Loudness is on but the WiiM link is unavailable");
+    $("toggle").textContent = live?.enabled ? "Turn off" : "Turn on";
     $("toggle").setAttribute("aria-pressed", String(!!live?.enabled));
     document
       .querySelectorAll("[data-preset]")

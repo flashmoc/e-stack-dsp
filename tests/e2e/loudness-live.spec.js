@@ -31,6 +31,9 @@ test('loudness displays live compensation and keeps server preset mutations scop
     await expect(f.locator('#presetName')).toHaveText('HOME');
     await expect(f.locator('#bridgeState')).toHaveText('Connected');
     await expect(f.locator('#compensation')).toHaveText('25 %');
+    await expect(f.locator('#loudnessMode')).toHaveText('ON');
+    await expect(f.locator('#loudnessMode')).toHaveAttribute('data-state', 'ready');
+    await expect(f.locator('#toggle')).toHaveText('Turn off');
     await expect(f.locator('#responseStatus')).toHaveText('Current · 25% of maximum');
     const maxPath = await f.locator('#responseMaximum').getAttribute('d');
     const quarterPath = await f.locator('#responseCurrent').getAttribute('d');
@@ -45,16 +48,21 @@ test('loudness displays live compensation and keeps server preset mutations scop
     bridgeConnected = false;
     await expect(f.locator('#responseStatus')).toContainText('unavailable');
     await expect(f.locator('#bridgeState')).toHaveText('Bridge off');
+    await expect(f.locator('#loudnessMode')).toHaveText('ON · LINK DOWN');
+    await expect(f.locator('#loudnessMode')).toHaveAttribute('data-state', 'degraded');
     await expect(f.locator('#responseCurrent')).not.toHaveAttribute('d');
 
     await f.locator('#toggle').click();
     await expect(f.locator('#toggle')).toHaveAttribute('aria-pressed', 'false');
     await expect(f.locator('#responseStatus')).toHaveText('Loudness off · flat response');
     await expect(f.locator('#compensation')).toHaveText('Off');
+    await expect(f.locator('#loudnessMode')).toHaveText('OFF');
+    await expect(f.locator('#toggle')).toHaveText('Turn on');
     model.assertOnlyLoudnessChanged(original, await dsp('GetConfigJson'));
 
     await f.locator('#toggle').click();
     await expect(f.locator('#toggle')).toHaveAttribute('aria-pressed', 'true');
+    await expect(f.locator('#loudnessMode')).toHaveText('ON · LINK DOWN');
     model.assertOnlyLoudnessChanged(original, await dsp('GetConfigJson'));
     await expect(f.locator('#mappingDetails')).not.toHaveAttribute('open');
     await f.locator('#mappingDetails summary').click();

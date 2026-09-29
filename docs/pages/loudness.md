@@ -17,6 +17,9 @@ show how WiiM attenuation maps to compensation factor.
 The product page keeps preset, WiiM link, compensation and enable/disable in
 one compact status row. Detailed WiiM level mapping is expandable; connection
 diagnostics remain on the Connections page rather than duplicating that panel.
+The status row explicitly distinguishes `OFF`, `ON`, and `ON · LINK DOWN`.
+This reflects the verified DSP Loudness filter state separately from WiiM
+telemetry; the button says `Turn on` or `Turn off` to describe its action.
 Offline mode is a disabled explanatory surface; no operational mock is loaded.
 Software validation: scoped preset/curve E2E and responsive viewport checks.
 Actual WiiM/hardware acceptance remains separate.
