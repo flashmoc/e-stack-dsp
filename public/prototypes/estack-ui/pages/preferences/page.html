@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="../../shared/tokens.css?v=appearance1" />
     <link rel="stylesheet" href="../../shared/base.css" />
     <link rel="stylesheet" href="../../shared/workflow-surface.css?v=workspace-layout1" />
-    <link rel="stylesheet" href="./page.css?v=appearance1" />
+    <link rel="stylesheet" href="./page.css?v=connections-in-preferences1" />
   </head>
   <body>
     <main class="product-surface preferences-page" data-page="preferences">
@@ -44,15 +44,39 @@
         <label class="toggle-row"><span><strong>Information density</strong><small>Spacing between controls.</small></span><select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
         <label class="toggle-row"><span><strong>Contrast</strong><small>Stronger outlines and secondary labels.</small></span><select id="contrast"><option value="standard">Standard</option><option value="high">High</option></select></label>
         <label class="toggle-row"><span><strong>Corner style</strong><small>Shape of panels and controls.</small></span><select id="corners"><option value="soft">Soft</option><option value="crisp">Crisp</option></select></label>
-        <label class="toggle-row"><span><strong>Default page</strong><small>Opened when the app URL has no page selected.</small></span><select id="homePage"><option value="control">Control</option><option value="input-processing">Input Processing</option><option value="output-processing">Output Processing</option><option value="loudness">Loudness</option><option value="signal-generator">Signal Generator</option><option value="measurement-batch">Measurement Batch</option><option value="advanced">Advanced</option><option value="connections">Connections</option><option value="preferences">Preferences</option></select></label>
+        <label class="toggle-row"><span><strong>Default page</strong><small>Opened when the app URL has no page selected.</small></span><select id="homePage"><option value="control">Control</option><option value="input-processing">Input Processing</option><option value="output-processing">Output Processing</option><option value="loudness">Loudness</option><option value="signal-generator">Signal Generator</option><option value="measurement-batch">Measurement Batch</option><option value="advanced">Advanced</option><option value="preferences">Preferences</option></select></label>
+      </section>
+
+      <section id="connectionsPanel" aria-labelledby="connectionsHeading">
+        <header class="surface-actions">
+          <div><h2 id="connectionsHeading">Connections</h2><p class="muted">Live, read-only system diagnostics.</p></div>
+          <div class="connections-actions"><output id="connectionState" role="status">Connecting…</output><button id="connectionRefresh" type="button">Refresh now</button></div>
+        </header>
+        <div class="surface-metrics">
+          <div><small>CAMILLA NODE</small><strong id="runtime">—</strong></div>
+          <div><small>CAMILLA DSP</small><strong id="dsp">—</strong></div>
+          <div><small>SPECTRUM</small><strong id="spectrum">—</strong></div>
+        </div>
+        <dl class="connections-details">
+          <div><dt>Sample rate</dt><dd id="rate">—</dd></div>
+          <div><dt>Product transport</dt><dd id="transport">—</dd></div>
+          <div><dt>DSP proxy</dt><dd id="proxy">—</dd></div>
+          <div><dt>Last successful DSP check</dt><dd id="checked">—</dd></div>
+        </dl>
+        <div class="connections-devices">
+          <div><h3>Capture</h3><dl><div><dt>Source</dt><dd id="captureType">—</dd></div><div><dt>Device</dt><dd id="captureDevice">—</dd></div><div><dt>Channels</dt><dd id="captureChannels">—</dd></div></dl></div>
+          <div><h3>Playback</h3><dl><div><dt>Destination</dt><dd id="playbackType">—</dd></div><div><dt>Device</dt><dd id="playbackDevice">—</dd></div><div><dt>Channels</dt><dd id="playbackChannels">—</dd></div></dl></div>
+        </div>
+        <p id="connectionNotice" class="muted" role="status"></p>
       </section>
 
       <footer class="preferences-footer"><small>Saved in this browser · Audio processing is unchanged</small><button id="reset" type="button">Restore defaults</button></footer>
       <p id="notice" role="status"></p>
     </main>
-    <script src="../../shared/appearance.js?v=appearance2"></script>
+    <script src="../../shared/appearance.js?v=connections-in-preferences1"></script>
     <script src="../../shared/estack-dsp-bridge.js"></script>
     <script src="../../shared/product-surface.js"></script>
-    <script src="./page.js?v=appearance1"></script>
+    <script src="../../shared/connections-inspector.js?v=connections-in-preferences1"></script>
+    <script src="./page.js?v=connections-in-preferences1"></script>
   </body>
 </html>

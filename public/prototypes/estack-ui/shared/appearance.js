@@ -19,14 +19,16 @@
     homePage: [
       "control", "input-processing", "output-processing", "loudness",
       "signal-generator", "measurement-batch",
-      "advanced", "connections", "preferences",
+      "advanced", "preferences",
     ],
   };
 
   function normalize(value) {
     const result = {};
     for (const [key, options] of Object.entries(allowed)) {
-      result[key] = options.includes(value?.[key]) ? value[key] : defaults[key];
+      result[key] = key === "homePage" && value?.[key] === "connections"
+        ? "preferences"
+        : options.includes(value?.[key]) ? value[key] : defaults[key];
     }
     return result;
   }

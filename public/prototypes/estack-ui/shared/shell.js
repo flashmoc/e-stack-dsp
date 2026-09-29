@@ -54,12 +54,14 @@
   }
   function choose(name) {
     if (name === 'system-presets') { openPresets(); return; }
+    const diagnostics = name === 'connections';
+    if (diagnostics) name = 'preferences';
     const route = routes[name] ? name : 'control';
     if (presetsDialog.open) presetsDialog.close();
     if (selected !== route) {
-      selected = route; frame.src = routes[route];
+      selected = route; frame.src = routes[route] + (diagnostics ? '#connectionsPanel' : '');
       frame.title = `${links.find(link => link.dataset.page === route).textContent} — E-Stack DSP`;
-    }
+    } else if (diagnostics) frame.contentDocument?.getElementById('connectionsPanel')?.scrollIntoView();
     links.forEach(link => link.setAttribute('aria-current', link.dataset.page === route ? 'page' : 'false'));
     select.value = route; history.replaceState(null, '', `#${route}`);
   }

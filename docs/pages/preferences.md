@@ -21,3 +21,9 @@ presets or safety workflows. Reset removes only this browser presentation key.
 There is no EStackPrototypeDSP dependency in either transport mode.
 E2E verifies visible shell/workspace colors, layout and contrast, route
 precedence, persistence, and reset.
+
+Connections is the read-only diagnostic section of Preferences. It polls the
+runtime, DSP and spectrum through EStackDSPBridge, shows current capture and
+playback devices, and offers a refresh action. It does not save browser
+preferences or send DSP writes. The former `#connections` route opens
+Preferences; stored Connections default-page choices migrate to Preferences.

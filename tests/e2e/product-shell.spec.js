@@ -8,7 +8,6 @@ const routes = [
   "signal-generator",
   "measurement-batch",
   "advanced",
-  "connections",
   "preferences",
 ];
 for (const width of [390, 1440])
@@ -25,6 +24,8 @@ for (const width of [390, 1440])
     await expect(page.locator(".shell-nav")).not.toContainText(
       /Design System|Prototype|MOCK/i,
     );
+    await expect(page.locator('.shell-nav [data-page="connections"]')).toHaveCount(0);
+    await expect(page.locator('#mobilePageSelect option[value="connections"]')).toHaveCount(0);
     await expect(page.locator(".environment-banner")).toBeHidden();
     const guiLink = page.locator(width === 390 ? '.shell-mobile-nav [data-camillagui]' : '.shell-nav [data-camillagui]');
     await expect(guiLink).toBeVisible();
@@ -99,6 +100,14 @@ test('System Presets deep link opens a dialog above Control', async ({ page, req
   await page.keyboard.press('Escape');
   await expect(page.locator('#systemPresetsDialog')).toBeHidden();
   await expect(page).toHaveURL(/#control$/);
+});
+
+test('old Connections route opens Preferences diagnostics', async ({ page, request }) => {
+  await demo(request);
+  await page.goto('/estack-dsp/?transport=camillanode#connections');
+  await expect(page).toHaveURL(/#preferences$/);
+  await expect(page.frameLocator('#pageFrame').locator('#connectionsPanel')).toBeVisible();
+  await expect.poll(() => page.frameLocator('#pageFrame').locator('body').evaluate(() => scrollY)).toBeGreaterThan(0);
 });
 
 test('closing System Presets preserves the current tuning workspace', async ({ page, request }) => {

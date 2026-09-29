@@ -30,7 +30,7 @@ Default product mode is local and makes no network request. To enable the
 same-origin compatibility transport, use:
 
 ```text
-http://<camillanode-host>:<port>/estack-dsp/?transport=camillanode#connections
+http://<camillanode-host>:<port>/estack-dsp/?transport=camillanode#preferences
 ```
 
 Connections automatically reads runtime, DSP configuration and spectrum status.

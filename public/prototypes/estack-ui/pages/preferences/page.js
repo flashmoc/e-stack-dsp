@@ -41,5 +41,8 @@
     }
   });
   addEventListener("storage", event => { if (event.key === appearance.KEY) render(); });
+  EStackConnectionsInspector.mount($("connectionsPanel"), {
+    state: "connectionState", refresh: "connectionRefresh", notice: "connectionNotice",
+  });
   render();
 })();

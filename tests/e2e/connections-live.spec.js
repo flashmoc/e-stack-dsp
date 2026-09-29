@@ -1,2 +1,22 @@
-const{test,expect}=require('@playwright/test');const{demo,dsp,frame}=require('./batch-helpers');
-test('connections reports live devices and never writes',async({page,request})=>{await demo(request);const original=await dsp('GetConfigJson'),writes=[];page.on('websocket',ws=>ws.on('framesent',({payload})=>{if(/SetConfig|SetVolume|SetMute/.test(String(payload)))writes.push(payload)}));const f=await frame(page,'connections');await expect(f.locator('#dsp')).toHaveText('Connected');await expect(f.locator('#captureType')).toHaveText(original.devices.capture.type);await expect(f.locator('#captureChannels')).toHaveText(String(original.devices.capture.channels));await expect(f.locator('#spectrum')).not.toHaveText('—');expect(await f.evaluate(()=>typeof EStackPrototypeDSP)).toBe('undefined');await f.locator('#refresh').click();await expect(f.locator('#refresh')).toBeEnabled();expect(await dsp('GetConfigJson')).toEqual(original);expect(writes).toEqual([]);});
+const { test, expect } = require('@playwright/test');
+const { demo, dsp, frame } = require('./batch-helpers');
+
+test('Preferences Connections section reports live devices without writes', async ({ page, request }) => {
+  await demo(request);
+  const original = await dsp('GetConfigJson');
+  const writes = [];
+  page.on('websocket', socket => socket.on('framesent', ({ payload }) => {
+    if (/SetConfig|SetVolume|SetMute/.test(String(payload))) writes.push(payload);
+  }));
+  const preferences = await frame(page, 'preferences');
+  const connections = preferences.locator('#connectionsPanel');
+  await expect(connections.locator('#dsp')).toHaveText('Connected');
+  await expect(connections.locator('#captureType')).toHaveText(original.devices.capture.type);
+  await expect(connections.locator('#captureChannels')).toHaveText(String(original.devices.capture.channels));
+  await expect(connections.locator('#spectrum')).not.toHaveText('—');
+  expect(await preferences.evaluate(() => typeof EStackPrototypeDSP)).toBe('undefined');
+  await connections.locator('#connectionRefresh').click();
+  await expect(connections.locator('#connectionRefresh')).toBeEnabled();
+  expect(await dsp('GetConfigJson')).toEqual(original);
+  expect(writes).toEqual([]);
+});

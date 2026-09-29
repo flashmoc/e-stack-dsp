@@ -29,8 +29,8 @@ CamillaNode-compatible APIs and transport; it is not a second DSP backend.
 - [Loudness](pages/loudness.md) — live server presets and WiiM bridge state.
 - [Signal Generator](pages/signal-generator.md) — server-owned safe test workflow.
 - [Measurement Batch operator UI](pages/measurement-batch.md) — live sequencing and restore.
-- [Connections](pages/connections.md) — read-only runtime diagnostics.
-- [Preferences](pages/preferences.md) — browser-only presentation settings.
+- [Preferences](pages/preferences.md) — browser-only presentation settings and
+  [read-only Connections diagnostics](pages/connections.md).
 
 ## Supporting documents
 

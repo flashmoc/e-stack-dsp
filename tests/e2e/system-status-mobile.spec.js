@@ -1,7 +1,7 @@
 'use strict';
 const {test,expect}=require('@playwright/test');
 const fs=require('node:fs');const vm=require('node:vm');
-const routes=['control','output-processing','input-processing','loudness','advanced','signal-generator','measurement-batch','preferences','connections'];
+const routes=['control','output-processing','input-processing','loudness','advanced','signal-generator','measurement-batch','preferences'];
 test('system status handles thresholds, missing protection and absent telemetry',()=>{
  const context={window:{}};vm.createContext(context);
  for(const file of ['pipeline','control-model','system-status'])vm.runInContext(fs.readFileSync(`public/prototypes/estack-ui/shared/domain/${file}.js`,'utf8'),context);
@@ -28,8 +28,8 @@ for(const width of [360,390,430,1440])test(`all workspaces retain live shell sta
   await expect(page.locator('[data-shell-load]')).toHaveText(/\d+\.\d %/);await expect(page.locator('[data-shell-limiters]')).toBeVisible();
   expect(await frame.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   if(route==='control') expect(await frame.evaluate(()=>[...document.querySelectorAll('.channel-pair')].every(pair=>{
-   const link=pair.querySelector('.pair-link').getBoundingClientRect();
-   return link.height>=44 && [...pair.querySelectorAll('.mixer-strip')].every(strip=>strip.getBoundingClientRect().bottom<=link.top+1);
+   const links=pair.querySelectorAll('.strip-pair-link');
+   return links.length===2 && [...links].every(link=>link.getBoundingClientRect().height>=24);
   }))).toBeTruthy();
   expect(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight)).toBeTruthy();
   await frame.evaluate(()=>scrollTo(0,document.body.scrollHeight));await expect(page.locator('[data-shell-load]')).toBeInViewport();

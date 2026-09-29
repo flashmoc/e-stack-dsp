@@ -4,7 +4,7 @@ const { demo } = require('./batch-helpers');
 const pages = [
   'input-processing', 'control', 'output-processing', 'loudness',
   'signal-generator', 'measurement-batch',
-  'advanced', 'connections', 'preferences',
+  'advanced', 'preferences',
 ];
 
 test('product workspaces share the Input page alignment without mobile overflow', async ({ page, request }) => {

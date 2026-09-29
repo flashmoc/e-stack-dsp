@@ -20,11 +20,10 @@ test('browser appearance and default page affect the live product without DSP wr
   await expect(preferences.locator('section').first()).toHaveCSS('border-radius', '2px');
   await expect(preferences.locator('[data-choice="background"][data-value="midnight"]')).toHaveAttribute('aria-pressed', 'true');
 
-  const connections = await frame(page, 'connections');
-  await expect(connections.locator('html')).toHaveAttribute('data-density', 'compact');
-  await expect(connections.locator('body')).toHaveCSS('background-color', 'rgb(10, 18, 32)');
-  await expect(connections.locator('.product-surface')).toHaveCSS('padding', '16px');
-  await expect(connections.locator('section').first()).toHaveCSS('border-top-color', 'rgb(129, 157, 163)');
+  await expect(preferences.locator('html')).toHaveAttribute('data-density', 'compact');
+  await expect(preferences.locator('body')).toHaveCSS('background-color', 'rgb(10, 18, 32)');
+  await expect(preferences.locator('.product-surface')).toHaveCSS('padding', '16px');
+  await expect(preferences.locator('#connectionsPanel')).toHaveCSS('border-top-color', 'rgb(129, 157, 163)');
   const output = await frame(page, 'output-processing');
   await expect(output.locator('body')).toHaveCSS('background-color', 'rgb(10, 18, 32)');
   const control = await frame(page, 'control');
@@ -63,4 +62,14 @@ test('phone preferences stay touchable and choose the default workspace', async 
   await page.goto('/estack-dsp/?transport=camillanode');
   await expect(page).toHaveURL(/#signal-generator$/);
   await expect(page.locator('#mobilePageSelect')).toHaveValue('signal-generator');
+});
+
+test('stored Connections default opens Preferences after navigation consolidation', async ({ page, request }) => {
+  await demo(request);
+  await page.goto('/estack-dsp/?transport=camillanode#control');
+  await page.evaluate(() => localStorage.setItem('estack.product.presentation', JSON.stringify({ homePage: 'connections' })));
+  await page.goto('/estack-dsp/?transport=camillanode');
+  await expect(page).toHaveURL(/#preferences$/);
+  await expect(page.frameLocator('#pageFrame').locator('#homePage')).toHaveValue('preferences');
+  await expect(page.frameLocator('#pageFrame').locator('#connectionsPanel')).toBeVisible();
 });

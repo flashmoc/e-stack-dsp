@@ -1,6 +1,8 @@
 # Connections
 
-Read-only product diagnostics automatically inspect GET /api/runtime,
+Connections now lives inside Preferences, beneath display settings. The former
+`#connections` bookmark opens Preferences; its standalone page URL remains a
+read-only compatibility surface. The diagnostics automatically inspect GET /api/runtime,
 GetConfigJson through /ws/dsp and GetState through /ws/spectrum, exclusively
 via EStackDSPBridge. A non-overlapping three-second poll updates mounted text
 nodes. Runtime, main DSP and spectrum have independent availability states.
