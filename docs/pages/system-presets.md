@@ -105,3 +105,9 @@ reconciles the existing Global EQ/PEQ browser display flags with actual pipeline
 membership. Neutral or absent bands use the neutral enabled presentation. This
 does not write DSP state or change the Input/Output domain semantics. A failed
 presentation sync reports that the preset was applied but display sync failed.
+
+Saved preset export normally uses the server's read-only export endpoint. If an
+older CamillaNode instance returns 404 for that endpoint, the page reads the
+same saved record through `/getConfigFile` and validates its processing and
+Master before offering JSON. Live export requires the server endpoint because
+it checks temporary workflows and reads a stable DSP configuration and Master.

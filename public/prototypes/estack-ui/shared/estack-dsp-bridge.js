@@ -93,7 +93,11 @@
     requireHardware();
     const response = await fetch(path, { cache: 'no-store', ...options });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.ok === false) throw new Error(data.error || `CamillaNode API request failed (${response.status}).`);
+    if (!response.ok || data.ok === false) {
+      const error = new Error(data.error || `CamillaNode API request failed (${response.status}).`);
+      error.status = response.status;
+      throw error;
+    }
     return data;
   }
 

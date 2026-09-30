@@ -80,6 +80,21 @@ test("system capture/apply/startup preserves hardware and mixed records, locks t
     expect(savedExport.processing.filters).toEqual(original.filters);
     expect(savedExport.config).toBeUndefined();
     await page.locator('#closeExport').click();
+    await page.route('**/api/system-presets/export?*', route =>
+      route.fulfill({ status: 404, contentType: 'text/html', body: 'Not Found' }));
+    await row.locator('[data-action=export]').click();
+    await expect(page.locator('#exportDialog')).toBeVisible();
+    await page.locator('#showExport').click();
+    const fallbackExport = JSON.parse(await page.locator('#exportJson').inputValue());
+    expect(fallbackExport.scope).toBe('saved-preset');
+    expect(fallbackExport.id).toBe(id);
+    expect(fallbackExport.processing).toEqual(savedExport.processing);
+    expect(fallbackExport.masterVolume).toBe(-18);
+    await page.locator('#closeExport').click();
+    await page.locator('#exportLive').click();
+    await expect(page.locator('#exportDialog')).toBeHidden();
+    await expect(page.locator('#notice')).toContainText('Live export requires the current CamillaNode server');
+    await page.unroute('**/api/system-presets/export?*');
     expect(await dsp('GetConfigJson')).toEqual(original);
     expect(await dsp('GetVolume')).toBe(-22);
     await row.locator("[data-action=apply]").click();

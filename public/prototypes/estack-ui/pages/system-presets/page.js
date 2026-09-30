@@ -187,7 +187,32 @@
     controls();
     try {
       const query = scope === "live" ? "scope=live" : `scope=preset&id=${encodeURIComponent(preset.id)}`;
-      const data = await B.api(`/api/system-presets/export?${query}`);
+      let data;
+      try {
+        data = await B.api(`/api/system-presets/export?${query}`);
+      } catch (error) {
+        if (error.status !== 404) throw error;
+        if (scope === "live") {
+          throw new Error("Live export requires the current CamillaNode server. Restart or update the server, then try again.");
+        }
+        const records = await B.api("/getConfigFile");
+        const record = Array.isArray(records) && records.find(item =>
+          item?.type === "estack-system" && String(item.id) === String(preset.id));
+        if (!record || !record.data?.processing?.filters ||
+            !Array.isArray(record.data.processing.pipeline)) {
+          throw new Error("Saved system preset is unavailable or has no valid processing snapshot.");
+        }
+        const masterVolume = record.data.masterVolume ?? preset.masterVolume;
+        if (!Number.isFinite(masterVolume) || masterVolume < -100 || masterVolume > 0) {
+          throw new Error("Saved system preset has no valid Master level.");
+        }
+        data = {
+          schema: "estack.system-export", version: 1,
+          scope: "saved-preset", exportedAt: new Date().toISOString(),
+          id: record.id, name: record.name, createdDate: record.createdDate,
+          processing: record.data.processing, masterVolume,
+        };
+      }
       exportPayload = JSON.stringify(data, null, 2) + "\n";
       exportName = scope === "live" ? "estack-live-system" :
         `estack-preset-${preset.name.normalize("NFKD").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "saved"}`;
