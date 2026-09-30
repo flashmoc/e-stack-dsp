@@ -64,12 +64,7 @@ function sendPage(file) {
     return (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'html', file));
 }
 
-app.get('/', (_req, res) => {
-    if (DEMO_MODE) {
-        return res.redirect(302, '/estack-dsp/?transport=camillanode#control');
-    }
-    return res.sendFile(path.join(PUBLIC_DIR, 'html', 'main.html'));
-});
+app.get('/', (_req, res) => res.redirect(302, '/estack-dsp/?transport=camillanode'));
 app.get('/basic', sendPage('basic.html'));
 app.get('/connections', sendPage('connections.html'));
 app.get('/equalizer', sendPage('equalizer.html'));

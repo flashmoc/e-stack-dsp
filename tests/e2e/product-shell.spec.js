@@ -10,6 +10,15 @@ const routes = [
   "advanced",
   "preferences",
 ];
+test('root opens the E-Stack DSP product', async ({ page, request }) => {
+  await demo(request);
+  const response = await request.get('/', { maxRedirects: 0 });
+  expect(response.status()).toBe(302);
+  expect(response.headers().location).toBe('/estack-dsp/?transport=camillanode');
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/estack-dsp\/\?transport=camillanode/);
+  await expect(page).toHaveTitle('E-Stack DSP');
+});
 for (const width of [390, 1440])
   test(`finished product navigation and live health at ${width}px`, async ({
     page,

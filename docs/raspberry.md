@@ -6,6 +6,9 @@ The deployment scripts manage the standalone **E-Stack DSP application only**.
 They do not install or rewrite CamillaDSP, ALSA, RASPIAUDIO configuration or
 the live DSP YAML. The canonical root/service are `/home/bastos/e-stack-dsp`
 and `estack-dsp.service`; see the [standalone migration guide](standalone-runtime.md).
+The application root `/` redirects to the live product at
+`/estack-dsp/?transport=camillanode`; opening the Raspberry host without a
+path no longer loads the retained legacy CamillaNode page.
 
 ## Historical first software-complete release candidate
 
