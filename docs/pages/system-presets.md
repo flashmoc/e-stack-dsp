@@ -12,6 +12,21 @@ Saved systems can be renamed by ID through /api/system-presets/rename. Names
 must be unique within estack-system. Snapshot data, ID and creation date remain
 unchanged; active/startup/last-used/boot-applied reference names follow the rename.
 
+Export is available for the **current live system** and for each saved preset.
+The export dialog offers a downloadable `.json` file or formatted JSON text
+that the operator can copy into a measurement-planning conversation. Live export
+contains the complete read-only `GetConfigJson` snapshot, its revision and
+current Master, including mixer routing, hardware channel/device details and
+unsaved edits. Configuration and Master are reread before export; a concurrent
+change makes the export fail so the operator can retry. It
+is refused while Signal Generator or Measurement Batch is active, or while DSP
+capture is SignalGenerator, so temporary routing is not mistaken for a baseline.
+A saved-preset export contains its stored processing and Master but no claim
+about current hardware, mixer routing or unsaved live changes. Both exports
+have schema `estack.system-export`, version 1 and an explicit `scope`. They may
+contain local device names or paths; sharing remains an operator action. Export
+never changes DSP, startup state or saved records.
+
 Software validation uses the canonical Linux demo. Raspberry hardware acceptance
 is pending; this feature does not change hardware YAML or deployment scripts.
 
@@ -38,6 +53,9 @@ configuration and replaces only filters, processors, pipeline and display title.
   No uploaded browser processing graph is accepted.
 - `POST /api/system-presets/delete`: `{id}`. Active, specific startup and
   last-used references prevent deletion. No automatic fallback on deletion.
+- `GET /api/system-presets/export?scope=live` or
+  `?scope=preset&id=<id>`: read-only, explicitly scoped JSON for download or
+  copying. The live scope is guarded against temporary workflows.
 - `GET/POST /api/startup-config`: existing startup state and future boot choice.
   The legacy `/active` endpoint now verifies processing and Master before marking.
 

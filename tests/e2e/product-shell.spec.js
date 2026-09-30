@@ -46,6 +46,13 @@ for (const width of [390, 1440])
     await expect(presetFrame.locator('#activeName')).toBeVisible();
     await expect(presetFrame.locator('#captureForm')).toBeVisible();
     await expect(presetFrame.locator('#startupForm')).toBeVisible();
+    await presetFrame.locator('#exportLive').click();
+    await expect(presetFrame.locator('#exportDialog')).toBeVisible();
+    await presetFrame.locator('#showExport').click();
+    expect(JSON.parse(await presetFrame.locator('#exportJson').inputValue()).scope).toBe('live');
+    expect(await presetFrame.locator('#exportJson').evaluate(el => el.scrollTop)).toBe(0);
+    expect(await presetFrame.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
+    await presetFrame.locator('#closeExport').click();
     expect(await presetFrame.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
     await expect(page.locator('[data-shell-load]')).toHaveText(/\d+\.\d %/);
     await page.locator('[data-close-presets]').click();

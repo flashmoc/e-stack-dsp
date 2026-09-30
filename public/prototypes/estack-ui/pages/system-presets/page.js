@@ -9,6 +9,8 @@
   let epoch = 0;
   let model = null,
     signature = "";
+  let exportPayload = null,
+    exportName = "";
   const help = {
     yaml: "Use the processing supplied by the hardware YAML.",
     specific: "Recall this saved system after CamillaDSP starts.",
@@ -20,13 +22,14 @@
   }
   function controls() {
     const unavailable = !model || busy;
-    document.querySelectorAll("button").forEach((button) => {
+    document.querySelectorAll(".product-surface button").forEach((button) => {
       button.disabled =
         unavailable ||
         (model.blocked &&
           ["capture", "apply", "update"].includes(
             button.dataset.action || button.id,
           )) ||
+        (model.blocked && button.id === "exportLive") ||
         button.dataset.protected === "true";
     });
     $("state").textContent = busy
@@ -91,6 +94,7 @@
           ["boot", "Use at boot"],
           ["update", "Update from live"],
           ["rename", "Rename"],
+          ["export", "Export"],
           ["delete", "Delete"],
         ]) {
           const button = document.createElement("button");
@@ -176,7 +180,31 @@
       for (let channel = 0; channel < 6; channel++) localStorage.setItem('estack.peq.disabled.' + channel + '.' + slot, String(disabled('USER_CH' + channel + '_PEQ_' + suffix)));
     }
   }
+  async function openExport(scope, preset) {
+    if (busy) return;
+    busy = true;
+    epoch++;
+    controls();
+    try {
+      const query = scope === "live" ? "scope=live" : `scope=preset&id=${encodeURIComponent(preset.id)}`;
+      const data = await B.api(`/api/system-presets/export?${query}`);
+      exportPayload = JSON.stringify(data, null, 2) + "\n";
+      exportName = scope === "live" ? "estack-live-system" :
+        `estack-preset-${preset.name.normalize("NFKD").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "saved"}`;
+      $("exportHeading").textContent = scope === "live" ? "Export current live system" : `Export ${preset.name}`;
+      $("exportScope").textContent = scope === "live"
+        ? "Current DSP configuration and Master, including unsaved changes and mixer routing."
+        : "Saved processing and Master only; this may differ from the live system.";
+      $("exportJson").value = exportPayload;
+      $("exportJson").hidden = true;
+      $("copyExport").hidden = true;
+      $("exportNotice").textContent = "";
+      $("exportDialog").showModal();
+    } catch (error) { note(error.message, true); }
+    finally { busy = false; await refresh(); controls(); }
+  }
   function act(action, preset) {
+    if (action === "export") { openExport("preset", preset); return; }
     if (action === "rename") {
       const name = prompt("New preset name", preset.name)?.trim();
       if (name && name !== preset.name) run(() => post("/api/system-presets/rename", { id: preset.id, name }), "Preset renamed");
@@ -211,6 +239,41 @@
       `${action === "apply" ? "Applied" : action === "update" ? "Updated" : "Deleted"} ${preset.name}`,
     );
   }
+  $("exportLive").addEventListener("click", () => openExport("live"));
+  $("closeExport").addEventListener("click", () => $("exportDialog").close());
+  $("exportDialog").addEventListener("close", () => {
+    exportPayload = null;
+    $("exportJson").value = "";
+  });
+  $("showExport").addEventListener("click", () => {
+    if (!exportPayload) return;
+    const textarea = $("exportJson");
+    textarea.hidden = false;
+    $("copyExport").hidden = false;
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(0, 0);
+    textarea.scrollTop = 0;
+  });
+  $("copyExport").addEventListener("click", async () => {
+    if (!exportPayload) return;
+    try {
+      await navigator.clipboard.writeText(exportPayload);
+      $("exportNotice").textContent = "JSON copied.";
+    } catch {
+      $("exportJson").select();
+      $("exportNotice").textContent = "Text selected. Copy it with Ctrl+C or ⌘C.";
+    }
+  });
+  $("downloadExport").addEventListener("click", () => {
+    if (!exportPayload) return;
+    const url = URL.createObjectURL(new Blob([exportPayload], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${exportName}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $("exportNotice").textContent = "JSON file prepared.";
+  });
   $("captureForm").addEventListener("submit", (event) => {
     event.preventDefault();
     run(

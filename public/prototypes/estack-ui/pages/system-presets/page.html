@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="../../shared/tokens.css" />
     <link rel="stylesheet" href="../../shared/base.css" />
     <link rel="stylesheet" href="../../shared/workflow-surface.css?v=workspace-layout1" />
-    <link rel="stylesheet" href="./page.css?v=system-dialog1" />
+    <link rel="stylesheet" href="./page.css?v=system-export1" />
   </head>
   <body>
     <main class="product-surface">
@@ -23,7 +23,7 @@
         <output id="state">Connecting…</output>
       </header>
       <section class="current-system">
-        <p class="eyebrow">CURRENT SYSTEM</p>
+        <div class="surface-actions current-system-actions"><p class="eyebrow">CURRENT SYSTEM</p><button id="exportLive" type="button">Export live JSON</button></div>
         <h2 id="activeName">—</h2>
         <div class="surface-metrics">
           <div><small>PROCESSING</small><strong id="dirty">—</strong></div>
@@ -102,8 +102,15 @@
         </div>
       </div>
     </main>
+    <dialog id="exportDialog" class="export-dialog" aria-labelledby="exportHeading">
+      <header class="surface-actions"><div><h2 id="exportHeading">Export system</h2><p id="exportScope" class="muted"></p></div><button id="closeExport" type="button" aria-label="Close export">Close</button></header>
+      <p class="muted">Choose a JSON file or show the text to copy. The export is read-only and may include local device names and paths.</p>
+      <div class="export-actions"><button id="downloadExport" type="button">Download JSON file</button><button id="showExport" type="button">Show JSON text</button><button id="copyExport" type="button" hidden>Copy text</button></div>
+      <textarea id="exportJson" aria-label="Exported system JSON" readonly spellcheck="false" hidden></textarea>
+      <p id="exportNotice" role="status"></p>
+    </dialog>
     <script src="../../shared/estack-dsp-bridge.js"></script>
     <script src="../../shared/product-surface.js"></script>
-    <script src="./page.js?v=system-dialog1"></script>
+    <script src="./page.js?v=system-export1"></script>
   </body>
 </html>

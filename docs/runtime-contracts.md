@@ -51,6 +51,12 @@ never accept a browser-authored processing graph. GET/POST /api/startup-config
 retain yaml/specific/last modes and existing state fields. /active verifies live
 processing and Master before accepting historical active-state notifications.
 
+GET `/api/system-presets/export?scope=live` returns a read-only full live DSP
+configuration plus Master for measurement planning. It refuses temporary
+Signal Generator/Measurement Batch states. `?scope=preset&id=<id>` returns one
+saved processing snapshot and Master, explicitly marked as saved rather than
+live. Neither form writes DSP state or exports unrelated saved records.
+
 GET /getConfigFile retains its array response and adds an ETag revision.
 POST /saveConfigFile accepts {base, records}; base must exactly match the current
 collection. Historical array clients must send the current ETag as If-Match.

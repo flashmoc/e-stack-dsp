@@ -58,6 +58,30 @@ test("system capture/apply/startup preserves hardware and mixed records, locks t
     const id = await row.getAttribute("data-id");
     await page.evaluate(() => { localStorage.setItem("estack.globalEq.disabled.GLOBAL_EQ_01", "true"); localStorage.setItem("estack.peq.disabled.0.0", "true"); });
     await dsp({ SetVolume: -22 });
+    await page.locator('#exportLive').click();
+    await expect(page.locator('#exportDialog')).toBeVisible();
+    await page.locator('#showExport').click();
+    const liveExport = JSON.parse(await page.locator('#exportJson').inputValue());
+    expect(liveExport.scope).toBe('live');
+    expect(liveExport.config).toEqual(original);
+    expect(liveExport.masterVolume).toBe(-22);
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#downloadExport').click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('estack-live-system.json');
+    expect(JSON.parse(fs.readFileSync(await download.path(), 'utf8'))).toEqual(liveExport);
+    await page.locator('#closeExport').click();
+    await row.locator('[data-action=export]').click();
+    await page.locator('#showExport').click();
+    const savedExport = JSON.parse(await page.locator('#exportJson').inputValue());
+    expect(savedExport.scope).toBe('saved-preset');
+    expect(savedExport.id).toBe(id);
+    expect(savedExport.masterVolume).toBe(-18);
+    expect(savedExport.processing.filters).toEqual(original.filters);
+    expect(savedExport.config).toBeUndefined();
+    await page.locator('#closeExport').click();
+    expect(await dsp('GetConfigJson')).toEqual(original);
+    expect(await dsp('GetVolume')).toBe(-22);
     await row.locator("[data-action=apply]").click();
     await expect(page.locator("#dirty")).toHaveText("ACTIVE");
     expect(await dsp("GetVolume")).toBe(-18);
@@ -97,6 +121,8 @@ test("system capture/apply/startup preserves hardware and mixed records, locks t
         })
       ).ok(),
     ).toBe(true);
+    await expect(page.locator('#exportLive')).toBeDisabled();
+    await expect(row.locator('[data-action=export]')).toBeEnabled();
     expect((await post("/api/system-presets/apply", { id })).status()).toBe(
       409,
     );

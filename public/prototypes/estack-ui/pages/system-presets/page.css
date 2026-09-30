@@ -6,6 +6,40 @@
 }
 html[data-display="dialog"] .product-surface > .surface-heading { display:none; }
 html[data-display="dialog"] .product-surface { padding:14px; }
+.current-system-actions { margin-bottom:8px; }
+.current-system-actions .eyebrow { margin:0; }
+.current-system-actions button { min-height:36px; }
+.export-dialog {
+  width:min(800px, calc(100vw - 28px));
+  max-width:none;
+  max-height:calc(100dvh - 28px);
+  padding:20px;
+  overflow:auto;
+  border:1px solid var(--color-border-strong);
+  border-radius:8px;
+  background:var(--color-surface-1);
+  color:var(--color-text-primary);
+  box-shadow:0 24px 70px rgba(0,0,0,.7);
+}
+.export-dialog::backdrop { background:rgba(0,5,7,.78); }
+.export-dialog > .muted { margin:14px 0; line-height:1.5; }
+.export-dialog .surface-actions { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; }
+.export-dialog .surface-actions .muted { margin-top:4px; }
+.export-actions { display:flex; flex-wrap:wrap; gap:8px; }
+#exportJson {
+  width:100%;
+  height:min(48dvh,420px);
+  min-height:180px;
+  margin-top:14px;
+  padding:12px;
+  resize:vertical;
+  border:1px solid var(--color-border-strong);
+  border-radius:5px;
+  background:var(--color-control);
+  color:var(--color-text-primary);
+  font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+#exportNotice { min-height:1.2em; margin-top:12px; color:var(--color-accent); }
 .system-sidebar,
 .preset-list,
 form {
@@ -73,4 +107,6 @@ form {
   .preset-row .danger {
     margin: 0;
   }
+  .export-dialog { padding:14px; }
+  .export-actions button { flex:1 1 140px; }
 }

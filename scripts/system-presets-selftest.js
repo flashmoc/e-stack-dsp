@@ -31,7 +31,9 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
     ],
   };
   let volume = -18,
-    corrupt = false;
+    corrupt = false,
+    driftOnSecondRead = false,
+    exportReads = 0;
   const commands = [];
   class Socket extends EventEmitter {
     constructor() {
@@ -45,7 +47,10 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
         name = typeof payload === "string" ? payload : Object.keys(payload)[0];
       commands.push(clone(payload));
       let value;
-      if (name === "GetConfigJson") value = JSON.stringify(config);
+      if (name === "GetConfigJson") {
+        if (driftOnSecondRead && ++exportReads === 2) config.filters.gain.parameters.gain = -4;
+        value = JSON.stringify(config);
+      }
       if (name === "GetState") value = "Running";
       if (name === "GetVolume") value = volume;
       if (name === "SetVolume") volume = payload.SetVolume;
@@ -95,6 +100,24 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
   }
   try {
     const original = clone(config);
+    commands.length = 0;
+    const liveExport = await api('/api/system-presets/export?scope=live');
+    assert(liveExport.ok);
+    assert.equal(liveExport.body.schema, 'estack.system-export');
+    assert.equal(liveExport.body.scope, 'live');
+    assert.deepEqual(liveExport.body.config, original);
+    assert.equal(liveExport.body.configRevision, require('../server/advancedModel').revision(original));
+    assert.equal(liveExport.body.masterVolume, -18);
+    assert(!commands.some(command => typeof command === 'object'), 'export must not write DSP state');
+    driftOnSecondRead = true; exportReads = 0;
+    assert.equal((await api('/api/system-presets/export?scope=live')).ok, false,
+      'concurrent DSP edits must invalidate the exported baseline');
+    driftOnSecondRead = false; config = clone(original);
+    config.devices.capture.type = 'SignalGenerator';
+    assert.equal((await api('/api/system-presets/export?scope=live')).ok, false);
+    config.devices.capture.type = original.devices.capture.type;
+    assert.equal((await api('/api/system-presets/export?scope=preset&id=missing')).ok, false);
+    assert.equal((await api('/api/system-presets/export?scope=unknown')).ok, false);
     const advanced = await api('/api/advanced');
     const advancedChange = { revision: advanced.body.revision, operation: { kind: 'filter', name: 'gain', value: { type: 'Gain', parameters: { gain: -4 } } } };
     commands.length = 0;
@@ -161,6 +184,19 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
     assert(capture.ok);
     const id = capture.body.id;
     const record = store.read(saved).find((r) => r.id === id);
+    const savedExport = await api(`/api/system-presets/export?scope=preset&id=${encodeURIComponent(id)}`);
+    assert(savedExport.ok);
+    assert.equal(savedExport.body.scope, 'saved-preset');
+    assert.equal(savedExport.body.id, id);
+    assert.deepEqual(savedExport.body.processing, record.data.processing);
+    assert.equal(savedExport.body.masterVolume, record.data.masterVolume);
+    assert.equal(savedExport.body.config, undefined, 'saved export must not claim live hardware state');
+    for (const file of [signal, batch]) {
+      store.atomicWrite(file, {});
+      assert.equal((await api('/api/system-presets/export?scope=live')).ok, false);
+      assert((await api(`/api/system-presets/export?scope=preset&id=${encodeURIComponent(id)}`)).ok);
+      fs.unlinkSync(file);
+    }
     assert.equal(record.data.version, 1);
     assert.equal(record.data.masterVolume, -18);
     assert.equal(record.data.processing.devices, undefined);

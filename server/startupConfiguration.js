@@ -549,6 +549,55 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
     }
   });
 
+  app.get("/api/system-presets/export", async (req, res) => {
+    try {
+      const result = await gate(async () => {
+        const scope = req.query?.scope;
+        if (scope === "preset") {
+          const id = req.query?.id;
+          if (typeof id !== "string" || !id || Array.isArray(id))
+            throw new Error("Choose a saved system preset to export");
+          const record = findSystemConfig(id);
+          if (!record) throw new Error("System preset not found");
+          if (!record.data?.processing?.filters ||
+              !Array.isArray(record.data?.processing?.pipeline))
+            throw new Error("System preset has no valid processing snapshot");
+          return {
+            schema: "estack.system-export", version: 1,
+            scope: "saved-preset", exportedAt: new Date().toISOString(),
+            id: record.id, name: record.name, createdDate: record.createdDate,
+            processing: clone(record.data?.processing),
+            masterVolume: storedVolumeFor(record, readState()),
+          };
+        }
+        if (scope !== "live") throw new Error("Choose live or a saved preset to export");
+        assertNormalWorkflow();
+        const ws = await openDsp();
+        try {
+          const config = await dspRequest(ws, "GetConfigJson");
+          if (config.devices?.capture?.type === "SignalGenerator")
+            throw new Error("Stop Signal Generator before exporting the live system");
+          const masterVolume = await dspRequest(ws, "GetVolume");
+          if (!Number.isFinite(masterVolume) || masterVolume < -100 || masterVolume > 0)
+            throw new Error("Invalid live Master");
+          const revision = require("./advancedModel").revision;
+          const configRevision = revision(config);
+          const verifyConfig = await dspRequest(ws, "GetConfigJson");
+          const verifyVolume = await dspRequest(ws, "GetVolume");
+          if (revision(verifyConfig) !== configRevision ||
+              !Number.isFinite(verifyVolume) || Math.abs(verifyVolume - masterVolume) > .05)
+            throw new Error("Live DSP changed during export. Retry when controls are idle.");
+          return {
+            schema: "estack.system-export", version: 1,
+            scope: "live", exportedAt: new Date().toISOString(),
+            configRevision, config, masterVolume,
+          };
+        } finally { ws.close(); }
+      });
+      res.set("Cache-Control", "no-store").json(result);
+    } catch (error) { res.status(409).json({ error: error.message }); }
+  });
+
   app.post("/api/system-presets/capture", jsonParser, async (req, res) => {
     try {
       const result = await gate(async () => {
