@@ -85,6 +85,8 @@ and Level Lock on a dedicated row below the protection summary.
 - Headroom uses live Compressor thresholds and Limiter `clip_limit`, a 4-second
   peak hold, calibrated voltage model and `−90 dBFS` no-signal threshold.
   Silence yields `WAITING` / `PLAY SIGNAL`; automatic Input Trim is unavailable.
+  The Input Trim safe-add readout says `PLAY AUDIO` while no unmuted output
+  carries measurable audio; the disabled button explains the requirement.
 - MID/HIGH links apply to Gain changes only. Mute remains per selected way.
   Each affected way has a compact link button between its name and dBFS readout;
   the two buttons in a pair reflect one shared state, while MID and HIGH remain

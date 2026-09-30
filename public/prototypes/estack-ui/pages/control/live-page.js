@@ -192,8 +192,16 @@
     const trim=trimValue(), available=service.availableInputTrim();
     if(!trimGesture) $('#inputTrimRange').value=String(trim);
     if(document.activeElement!==$('#inputTrimNumber')) $('#inputTrimNumber').value=trim.toFixed(1);
-    $('#inputTrimValue').textContent=formatDb(trim); $('#inputTrimAvailable').textContent=Number.isFinite(available)&&available>=.5 ? '+'+available.toFixed(1)+' dB' : 'HOLD';
-    $('#inputTrimUse').disabled=busy||trimWorking||!Number.isFinite(available)||available<.5;
+    const hasSafeAdd=Number.isFinite(available)&&available>=.5;
+    const noSignal=!latest?.headroom?.some(item=>item.hasSignal);
+    const reason=trim>=12?'TRIM MAX':noSignal?'PLAY AUDIO':'NO SAFE ADD';
+    $('#inputTrimValue').textContent=formatDb(trim);
+    $('#inputTrimAvailable').textContent=hasSafeAdd?'+'+available.toFixed(1)+' dB':reason;
+    $('#inputTrimUse').disabled=busy||trimWorking||!hasSafeAdd;
+    $('#inputTrimUse').title=hasSafeAdd?'Use the measured safe addition after playing representative audio.':
+      trim>=12?'Input Trim is already at its +12 dB maximum.':
+      noSignal?'Play representative audio through an unmuted output to measure headroom.':
+      'No safe 0.5 dB increase is available with the current signal.';
     $('#inputTrimDown').disabled=trim<=-20; $('#inputTrimUp').disabled=trim>=12;
   }
   function renderSummary() {
