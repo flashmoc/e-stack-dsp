@@ -370,6 +370,13 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
       assert.deepEqual({ devices: config.devices, mixers: config.mixers }, hardware, 'startup recall changed hardware');
     }
     const validEight = clone(config);
+    const missingMixer = clone(validEight);
+    missingMixer.pipeline = missingMixer.pipeline.filter(step => step.type !== 'Mixer');
+    const noMixerRecord = clone(store.read(saved).find(item => item.name === 'Eight channel 8'));
+    noMixerRecord.data.processing.pipeline = missingMixer.pipeline;
+    commands.length = 0;
+    await assert.rejects(() => system.applyRecord(noMixerRecord), /requires a live hardware mixer/);
+    assert(!commands.some(item => typeof item === 'object'), 'missing mixer caused a DSP write');
     for (const [label, edit, error] of [
       ['mixer output size', next => { next.mixers.main.channels.out = 6; }, /destination must be within 0\.\.5/],
       ['duplicate destination', next => { next.mixers.main.mapping[1].dest = 0; }, /duplicate destination 0/],

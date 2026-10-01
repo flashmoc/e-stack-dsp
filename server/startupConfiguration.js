@@ -320,6 +320,8 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
     }
     if (channels !== playbackChannels)
       throw new Error(`Processing ends with ${channels} channels, but hardware playback requires ${playbackChannels}`);
+    if (playbackChannels >= 6 && !finalMixer)
+      throw new Error('Six-way E-Stack processing requires a live hardware mixer');
     if (playbackChannels >= 6 && finalMixer && [0, 1, 2, 3, 4, 5].some(channel => !finalMixer.destinations.has(channel)))
       throw new Error(`Mixer '${finalMixer.name}' must map all six E-Stack logical ways (destinations 0..5); playback has ${playbackChannels} hardware channels`);
   }

@@ -18,13 +18,6 @@
     const step = config.pipeline[index]; const mixer = config?.mixers?.[step?.name];
     return mixer ? { index, step, mixer } : null;
   }
-  function activeOutputChannels(config) {
-    const context = firstMixerContext(config);
-    const destinations = new Set((context?.mixer?.mapping || []).map(item => numeric(item?.dest)).filter(Number.isInteger));
-    if (destinations.size) return [...destinations].sort((a, b) => a - b);
-    const playback = Number(config?.devices?.playback?.channels || 0);
-    return Array.from({ length: Math.max(0, playback) }, (_, channel) => channel);
-  }
   function hardwarePlaybackChannels(config) { return numeric(config?.devices?.playback?.channels); }
   function logicalWayChannels(config) {
     const playback = hardwarePlaybackChannels(config);
@@ -50,5 +43,5 @@
   function directPostMixerFilterNames(config, channel) {
     return directPostMixerFilterSteps(config, channel).flatMap(step => Array.isArray(step?.names) ? step.names.map(String) : []);
   }
-  window.EStackPipeline = Object.freeze({ LOGICAL_WAY_CHANNELS, channelsForStep, stepHasChannel, firstMixerContext, activeOutputChannels, hardwarePlaybackChannels, logicalWayChannels, directPostMixerFilterSteps, directPostMixerFilterNames });
+  window.EStackPipeline = Object.freeze({ LOGICAL_WAY_CHANNELS, channelsForStep, stepHasChannel, firstMixerContext, hardwarePlaybackChannels, logicalWayChannels, directPostMixerFilterSteps, directPostMixerFilterNames });
 })();
