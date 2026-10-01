@@ -53,14 +53,17 @@ configuration never silently rewrites its gain.
 
 MID L/R and HIGH L/R processing links use the same browser-local pair choices
 as Control (`estack.control.link.mid` and `.high`, linked by default). In Output
-Processing the link applies to the next Gain, Delay, phase trim and PEQ edit.
+Processing the link applies to the next Gain, mute, polarity, Delay and phase
+trim edit.
 It also applies to crossover edits: the canonical MID and HIGH crossover
 filters are already shared, while independently named edges are updated as a
 verified pair. Each linked edit is one guarded config transaction with readback
 for both ways. PEQ add, value/type change, enable/disable, reset and delete
-act on the same slot on both ways. Toggling a link alone makes no DSP write and
-does not silently synchronize different current values. Mute, polarity and
-hard limiter remain independent per way; Control continues to link Gain only.
+always affect only the selected way. Toggling a link alone makes no DSP write and
+does not silently synchronize different current values. A linked mute or
+polarity edit sets both ways to the selected value in one guarded transaction;
+FREE mode keeps them independent. Hard limiter remains independent per way.
+Control uses the same link state for Gain and mute.
 
 Per-way delay changes only the existing Delay filter’s `parameters.delay`:
 `0…100 ms`, step `0.01 ms`. Its `unit` and `subsample` properties are
@@ -109,6 +112,11 @@ filter and references and never renumbers another slot. A neutral band
 the processing stage. Disabled state is UI-only browser storage at
 `estack.peq.disabled.<channel>.<slot>`; it is not an invented DSP parameter.
 Active PEQs are deterministically ordered by slot before phase, Gain and Delay.
+For MID and HIGH, the PEQ header offers `Copy from <other way>` on the selected
+destination. This explicit action replaces all ten destination PEQ slots and
+their active/disabled states with the source way in one guarded transaction.
+It leaves the source, non-PEQ processing and the other pair unchanged. Later
+PEQ edits remain independent even while the processing link is on.
 
 ## Protection and graph
 

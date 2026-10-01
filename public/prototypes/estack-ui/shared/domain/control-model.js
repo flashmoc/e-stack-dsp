@@ -73,6 +73,18 @@
     }
   }
 
+  function assertOnlyWayMuteChanged(before, after, targets, muted) {
+    assertOnlyWayGainChanged(before, after, targets);
+    for (const target of targets) {
+      const oldFilter = clone(before.filters[target.name]);
+      const nextFilter = clone(after.filters[target.name]);
+      if (nextFilter.parameters.mute !== !!muted) throw new Error(`${target.name}: mute readback differs from the requested state`);
+      delete oldFilter.parameters.mute;
+      delete nextFilter.parameters.mute;
+      if (fingerprint(oldFilter) !== fingerprint(nextFilter)) throw new Error(`${target.name}: changed outside mute`);
+    }
+  }
+
   function removeInputTrim(config) {
     for (const step of config?.pipeline || []) {
       if (step?.type === 'Filter' && Array.isArray(step.names)) step.names = step.names.filter(name => name !== INPUT_TRIM_FILTER);
@@ -105,5 +117,5 @@
     if (fingerprint(withoutBefore) !== fingerprint(withoutAfter)) throw new Error('DSP processing outside Input Trim changed unexpectedly');
   }
 
-  window.EStackControlModel = Object.freeze({ WAY_DEFINITIONS, LINK_DEFINITIONS, CALIBRATED_LIMIT_VRMS, clone, fingerprint, protectedStructure, activeOutputs, way, finite, gainEntryForChannel, hardLimitForChannel, protectionForChannel, assertOnlyWayGainChanged, removeInputTrim, installInputTrim, inputTrimValue, assertOnlyInputTrimChanged });
+  window.EStackControlModel = Object.freeze({ WAY_DEFINITIONS, LINK_DEFINITIONS, CALIBRATED_LIMIT_VRMS, clone, fingerprint, protectedStructure, activeOutputs, way, finite, gainEntryForChannel, hardLimitForChannel, protectionForChannel, assertOnlyWayGainChanged, assertOnlyWayMuteChanged, removeInputTrim, installInputTrim, inputTrimValue, assertOnlyInputTrimChanged });
 })();

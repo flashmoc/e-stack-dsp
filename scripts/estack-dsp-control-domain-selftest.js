@@ -104,9 +104,23 @@ function createDomain(config) {
   assert.strictEqual(afterGain.filters.mid_r_gain.parameters.gain, -7.5, 'linked MID R gain did not change');
   assert.strictEqual(afterGain.filters.ESTACK_INPUT_PREAMP.parameters.gain, 4, 'gain operation altered pre-mixer Input Trim');
   await service.setWayMute(2, true);
-  const afterMute = getConfig();
+  let afterMute = getConfig();
   assert.strictEqual(afterMute.filters.mid_l_gain.parameters.mute, true, 'selected MID L mute did not change');
-  assert.strictEqual(afterMute.filters.mid_r_gain.parameters.mute, false, 'linked MID R mute changed with MID L');
+  assert.strictEqual(afterMute.filters.mid_r_gain.parameters.mute, true, 'linked MID R mute did not follow MID L');
+  assert.doesNotThrow(() => M.assertOnlyWayMuteChanged(afterGain, afterMute,
+    [2, 3].map(channel => ({ name: M.gainEntryForChannel(afterGain, channel).name })), true));
+  const invalidMute = clone(afterMute); invalidMute.filters.mid_r_gain.parameters.mute = false;
+  assert.throws(() => M.assertOnlyWayMuteChanged(afterGain, invalidMute,
+    [2, 3].map(channel => ({ name: M.gainEntryForChannel(afterGain, channel).name })), true), /readback differs/);
+  service.setLink('mid', false);
+  await service.setWayMute(3, false);
+  afterMute = getConfig();
+  assert.strictEqual(afterMute.filters.mid_l_gain.parameters.mute, true, 'FREE MID R mute altered MID L');
+  assert.strictEqual(afterMute.filters.mid_r_gain.parameters.mute, false, 'FREE MID R mute did not change');
+  await service.setWayMute(4, true);
+  afterMute = getConfig();
+  assert.strictEqual(afterMute.filters.high_l_gain.parameters.mute, true, 'linked HIGH L mute did not change');
+  assert.strictEqual(afterMute.filters.high_r_gain.parameters.mute, true, 'linked HIGH R mute did not follow HIGH L');
   await service.telemetry();
   assert.strictEqual(service.availableInputTrim(), null, 'silence produced an automatic Input Trim recommendation');
   console.log('OK:   E-Stack DSP Control modern pipeline, scoped mutations and silence safety');

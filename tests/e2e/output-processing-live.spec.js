@@ -121,7 +121,58 @@ test('compact way rail follows the graph and stereo links remain pair-scoped', a
   }
 });
 
-test('linked MID edits synchronize delay, phase, crossover and PEQ with exact restore', async ({ page, request }) => {
+test('linked MID and HIGH mute and polarity change together, then independently when free', async ({ page, request }) => {
+  await requireDemoRuntime(request);
+  const original = await dspCommand('GetConfigJson');
+  await page.goto('/estack-dsp/?transport=camillanode#output-processing');
+  const frame = await outputFrame(page);
+  await frame.locator('#systemEdit').click();
+  const pairs = [['mid', 2, 3, 'mid_l_gain', 'mid_r_gain'], ['high', 4, 5, 'high_l_gain', 'high_r_gain']];
+  try {
+    for (const [pair, left, right, leftName, rightName] of pairs) {
+      const link = frame.locator(`[data-processing-link="${pair}"]`);
+      await expect(link).toHaveAttribute('aria-pressed', 'true');
+      await frame.locator(`[data-way-channel="${left}"]`).click();
+      const before = await dspCommand('GetConfigJson');
+      const muteTarget = !before.filters[leftName].parameters.mute;
+      const polarityTarget = !before.filters[leftName].parameters.inverted;
+      await frame.locator('[data-mute]').click();
+      await expect.poll(async () => {
+        const config = await dspCommand('GetConfigJson');
+        return [config.filters[leftName].parameters.mute, config.filters[rightName].parameters.mute];
+      }).toEqual([muteTarget, muteTarget]);
+      await frame.locator(`[data-polarity="${polarityTarget}"]`).click();
+      await expect.poll(async () => {
+        const config = await dspCommand('GetConfigJson');
+        return [config.filters[leftName].parameters.inverted, config.filters[rightName].parameters.inverted];
+      }).toEqual([polarityTarget, polarityTarget]);
+      const linked = await dspCommand('GetConfigJson');
+      const scoped = clone(linked);
+      for (const name of [leftName, rightName]) {
+        scoped.filters[name].parameters.mute = before.filters[name].parameters.mute;
+        scoped.filters[name].parameters.inverted = before.filters[name].parameters.inverted;
+      }
+      expect(scoped).toEqual(before);
+
+      await link.click();
+      await expect(link).toHaveAttribute('aria-pressed', 'false');
+      await frame.locator('[data-mute]').click();
+      await frame.locator(`[data-polarity="${!polarityTarget}"]`).click();
+      await expect.poll(async () => {
+        const config = await dspCommand('GetConfigJson');
+        return [config.filters[leftName].parameters.mute, config.filters[rightName].parameters.mute,
+          config.filters[leftName].parameters.inverted, config.filters[rightName].parameters.inverted];
+      }).toEqual([!muteTarget, muteTarget, !polarityTarget, polarityTarget]);
+      await link.click();
+    }
+  } finally {
+    const current = await dspCommand('GetConfigJson');
+    if (JSON.stringify(current) !== JSON.stringify(original)) await dspCommand({ SetConfigJson: JSON.stringify(original) });
+    expect(await dspCommand('GetConfigJson')).toEqual(original);
+  }
+});
+
+test('linked MID delay, phase and crossover stay paired while PEQ needs explicit copy', async ({ page, request }) => {
   await requireDemoRuntime(request);
   const original = await dspCommand('GetConfigJson');
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -175,12 +226,40 @@ test('linked MID edits synchronize delay, phase, crossover and PEQ with exact re
     await expect.poll(async () => {
       const config = await dspCommand('GetConfigJson');
       return [2, 3].map(channel => config.filters[`USER_CH${channel}_PEQ_${String(slot + 1).padStart(2, '0')}`]?.parameters);
+    }).toEqual([expect.objectContaining({ freq: 710, gain: 2 }), undefined]);
+    await frame.locator('[data-way-channel="3"]').click();
+    await expect(frame.locator('#copyPeq')).toHaveText('Copy from MID L');
+    await frame.locator('#copyPeq').click();
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters[`USER_CH2_PEQ_${String(slot + 1).padStart(2, '0')}`]?.parameters,
+        config.filters[`USER_CH3_PEQ_${String(slot + 1).padStart(2, '0')}`]?.parameters];
     }).toEqual([expect.objectContaining({ freq: 710, gain: 2 }), expect.objectContaining({ freq: 710, gain: 2 })]);
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).fill('3');
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters[`USER_CH2_PEQ_${String(slot + 1).padStart(2, '0')}`].parameters.gain,
+        config.filters[`USER_CH3_PEQ_${String(slot + 1).padStart(2, '0')}`].parameters.gain];
+    }).toEqual([2, 3]);
+    await frame.locator('#copyPeq').click();
+    await expect.poll(async () => (await dspCommand('GetConfigJson')).filters[`USER_CH3_PEQ_${String(slot + 1).padStart(2, '0')}`].parameters.gain).toBe(2);
+    await frame.locator('[data-way-channel="2"]').click();
     await frame.locator(`[data-peq-toggle="${slot}"]`).click();
     await expect.poll(async () => {
       const config = await dspCommand('GetConfigJson');
       return [2, 3].map(channel => stage(config, channel, entry => entry.names.includes(channel === 2 ? 'mid_l_gain' : 'mid_r_gain')).names.includes(`USER_CH${channel}_PEQ_${String(slot + 1).padStart(2, '0')}`));
+    }).toEqual([false, true]);
+    await frame.locator('[data-way-channel="3"]').click();
+    await frame.locator('#copyPeq').click();
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [2, 3].map(channel => stage(config, channel, entry => entry.names.includes(channel === 2 ? 'mid_l_gain' : 'mid_r_gain')).names.includes(`USER_CH${channel}_PEQ_${String(slot + 1).padStart(2, '0')}`));
     }).toEqual([false, false]);
+    await frame.locator(`[data-peq-delete="${slot}"]`).click();
+    await expect.poll(async () => (await dspCommand('GetConfigJson')).filters[`USER_CH3_PEQ_${String(slot + 1).padStart(2, '0')}`]).toBeUndefined();
+    await frame.locator('[data-way-channel="2"]').click();
+    await expect.poll(async () => (await dspCommand('GetConfigJson')).filters[`USER_CH2_PEQ_${String(slot + 1).padStart(2, '0')}`]).toBeDefined();
 
     await frame.locator(`[data-peq-delete="${slot}"]`).click();
     await frame.locator('[data-value="phase"]').fill('0');
@@ -205,6 +284,44 @@ test('linked MID edits synchronize delay, phase, crossover and PEQ with exact re
       const config = await dspCommand('GetConfigJson');
       return [config.filters.high_l_delay.parameters.delay, config.filters.high_r_delay.parameters.delay];
     }).toEqual([.75, .75]);
+  } finally {
+    const current = await dspCommand('GetConfigJson');
+    if (JSON.stringify(current) !== JSON.stringify(original)) await dspCommand({ SetConfigJson: JSON.stringify(original) });
+    expect(await dspCommand('GetConfigJson')).toEqual(original);
+  }
+});
+
+test('HIGH PEQ copies explicitly from R to L without linking later edits', async ({ page, request }) => {
+  await requireDemoRuntime(request);
+  const original = await dspCommand('GetConfigJson');
+  await page.goto('/estack-dsp/?transport=camillanode#output-processing');
+  const frame = await outputFrame(page);
+  const slot = Array.from({ length: 10 }, (_, index) => index).find(index => [4, 5].every(channel => !original.filters[`USER_CH${channel}_PEQ_${String(index + 1).padStart(2, '0')}`]));
+  expect(slot).toBeDefined();
+  const leftName = `USER_CH4_PEQ_${String(slot + 1).padStart(2, '0')}`;
+  const rightName = `USER_CH5_PEQ_${String(slot + 1).padStart(2, '0')}`;
+  try {
+    await expect(frame.locator('#copyPeq')).toBeHidden();
+    await frame.locator('#systemEdit').click();
+    await frame.locator('[data-way-channel="5"]').click();
+    await expect(frame.locator('#copyPeq')).toHaveText('Copy from HIGH L');
+    await frame.locator('#addPeq').click();
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).fill('2');
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters[leftName], config.filters[rightName]?.parameters?.gain];
+    }).toEqual([undefined, 2]);
+    await frame.locator('[data-way-channel="4"]').click();
+    await expect(frame.locator('#copyPeq')).toHaveText('Copy from HIGH R');
+    await frame.locator('#copyPeq').click();
+    await expect.poll(async () => (await dspCommand('GetConfigJson')).filters[leftName]?.parameters?.gain).toBe(2);
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).fill('3');
+    await frame.locator(`[data-peq-field="gain"][data-slot="${slot}"]`).press('Tab');
+    await expect.poll(async () => {
+      const config = await dspCommand('GetConfigJson');
+      return [config.filters[leftName]?.parameters?.gain, config.filters[rightName]?.parameters?.gain];
+    }).toEqual([3, 2]);
   } finally {
     const current = await dspCommand('GetConfigJson');
     if (JSON.stringify(current) !== JSON.stringify(original)) await dspCommand({ SetConfigJson: JSON.stringify(original) });

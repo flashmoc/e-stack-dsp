@@ -108,7 +108,7 @@
   async function setMaster(value) { const next = Math.round(clamp(value, -60, 0) / .5) * .5; await command({ SetVolume: next }); state.master = next; state.heldPeaks.clear(); emit(); return next; }
   function setLink(key, value) { if (!M.LINK_DEFINITIONS[key]) throw new Error('Unknown linked pair'); state.links[key] = !!value; saveLink(key, value); emit(); }
 
-  async function mutateWay(channel, change, targetChannels = null) {
+  async function mutateWay(channel, change, targetChannels = null, verify = null) {
     const before = await command('GetConfigJson');
     const targets = (targetChannels || linkedChannelsForConfig(channel, before)).map(item => ({ channel: item, ...M.gainEntryForChannel(before, item) }));
     if (targets.some(item => !item.name || item.filter?.type !== 'Gain')) throw new Error('Expected per-way Gain filter is unavailable');
@@ -117,10 +117,10 @@
       const filter = next.filters[target.name]; filter.parameters = filter.parameters || {};
       change(filter.parameters, target.channel);
     }
-    M.assertOnlyWayGainChanged(before, next, targets);
+    (verify || M.assertOnlyWayGainChanged)(before, next, targets);
     await command({ SetConfigJson: JSON.stringify(next) });
     const verified = await command('GetConfigJson');
-    M.assertOnlyWayGainChanged(before, verified, targets);
+    (verify || M.assertOnlyWayGainChanged)(before, verified, targets);
     for (const target of targets) {
       const actual = M.gainEntryForChannel(verified, target.channel);
       if (!actual || actual.name !== target.name) throw new Error(`${M.way(target.channel).name}: Gain filter changed unexpectedly`);
@@ -131,7 +131,11 @@
     const target = clamp(value, -60, 6);
     return mutateWay(channel, parameters => { parameters.gain = target; });
   }
-  function setWayMute(channel, muted) { return mutateWay(channel, parameters => { parameters.mute = !!muted; }, [Number(channel)]); }
+  function setWayMute(channel, muted) {
+    const target = !!muted;
+    return mutateWay(channel, parameters => { parameters.mute = target; }, null,
+      (before, after, targets) => M.assertOnlyWayMuteChanged(before, after, targets, target));
+  }
   async function measurementBatchActive() { try { return !!(await window.EStackDSPBridge.api('/api/measurement-batch/status')).active; } catch (_) { return false; } }
   function signalGeneratorActive(config = state.config) { return config?.devices?.capture?.type === 'SignalGenerator'; }
   function clampTrim(value) { return Math.max(INPUT_TRIM_MIN_DB, Math.min(INPUT_TRIM_MAX_DB, Math.round(Number(value) / INPUT_TRIM_STEP_DB) * INPUT_TRIM_STEP_DB)); }

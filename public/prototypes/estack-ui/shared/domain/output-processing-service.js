@@ -34,6 +34,14 @@
   }
   async function setMute(channel, muted) { return transact(next => { M.entryForType(next, channel, 'Gain').filter.parameters.mute = !!muted; }, (before, after) => M.assertGainMutation(before, after, channel)); }
   async function setPolarity(channel, inverted) { return transact(next => { M.entryForType(next, channel, 'Gain').filter.parameters.inverted = !!inverted; }, (before, after) => M.assertGainMutation(before, after, channel)); }
+  async function setLinkedGainFlag(channel, field, value) {
+    const pair = M.linkedPair(channel);
+    return transact(next => {
+      pair.forEach(item => { M.entryForType(next, item, 'Gain').filter.parameters[field] = !!value; });
+    }, (before, after) => M.assertLinkedGainFlagMutation(before, after, pair, field, value), { exactReadback: true });
+  }
+  function setLinkedMute(channel, muted) { return setLinkedGainFlag(channel, 'mute', muted); }
+  function setLinkedPolarity(channel, inverted) { return setLinkedGainFlag(channel, 'inverted', inverted); }
   async function setDelay(channel, value) {
     return transact(next => { const entry = M.entryForType(next, channel, 'Delay'); entry.filter.parameters.delay = M.round(M.clamp(value, 0, 100), 2); }, (before, after) => M.assertDelayMutation(before, after, channel));
   }
@@ -120,41 +128,50 @@
   async function deletePeq(channel, slot, disabledSlots = []) {
     return transact(next => { delete next.filters[M.peqName(channel, slot)]; syncPeq(next, channel, disabledSlots); }, (before, after) => M.assertPeqMutation(before, after, channel));
   }
-  async function addLinkedPeq(channel, disabledByChannel = {}) {
-    const pair = M.linkedPair(channel);
-    let createdSlot = null;
-    const result = await transact(next => {
-      createdSlot = M.PEQ_DEFAULT_FREQUENCIES.findIndex((_, slot) => pair.every(item => !next.filters[M.peqName(item, slot)]));
-      if (createdSlot < 0) throw new Error('No free PEQ slot is shared by both ways.');
-      pair.forEach(item => {
-        const entry = M.defaultPeq(item, createdSlot);
-        next.filters[entry.name] = entry.filter;
-        syncPeq(next, item, disabledByChannel[item] || []);
+  async function copyPeq(sourceChannel, targetChannel, sourceDisabledSlots = []) {
+    const source = Number(sourceChannel), target = Number(targetChannel);
+    if (!M.linkedPair(source).includes(target) || source === target) throw new Error('PEQ copy requires the opposite way in the same MID or HIGH pair.');
+    let copiedDisabled = [];
+    const result = await transact((next, before) => {
+      const sourceSlots = M.peqSlots(before, source);
+      const sourceStage = M.outputStage(before, source).step.names;
+      sourceSlots.forEach((entry, slot) => {
+        const sourceFilter = before.filters?.[M.peqName(source, slot)];
+        const targetFilter = before.filters?.[M.peqName(target, slot)];
+        if ((sourceFilter && !entry) || (targetFilter && targetFilter.type !== 'Biquad'))
+          throw new Error('PEQ copy found an unexpected filter type in a user slot.');
+        if (entry) {
+          const p = entry.filter.parameters;
+          if (!M.PEQ_TYPES.includes(p?.type) || !Number.isFinite(p?.freq) || !Number.isFinite(p?.gain) || !Number.isFinite(p?.q) ||
+              p.freq < 20 || p.freq > 20000 || p.gain < -20 || p.gain > 20 || p.q < .1 || p.q > 20)
+            throw new Error('PEQ copy source has an unsupported band.');
+        }
       });
-    }, (before, after) => M.assertLinkedWayMutation(before, after, channel, 'peq', { slot: createdSlot }), { exactReadback: true });
-    return { ...result, createdSlot };
-  }
-  async function setLinkedPeq(channel, slot, patch, disabledByChannel = {}) {
-    const pair = M.linkedPair(channel);
-    return transact(next => {
-      const source = next.filters[M.peqName(channel, slot)]?.parameters || M.defaultPeq(channel, slot).filter.parameters;
-      const parameters = M.normalizePeq(channel, slot, { ...source, ...patch });
-      pair.forEach(item => {
-        const name = M.peqName(item, slot);
-        const filter = next.filters[name]?.type === 'Biquad' ? next.filters[name] : M.defaultPeq(item, slot).filter;
-        filter.parameters = clone(parameters);
-        next.filters[name] = filter;
-        syncPeq(next, item, disabledByChannel[item] || []);
+      const browserDisabled = normalizeDisabled(sourceDisabledSlots);
+      copiedDisabled = sourceSlots.filter(entry => entry && !sourceStage.includes(entry.name) &&
+        (browserDisabled.has(entry.slot) || !M.isNeutralPeq(entry.filter))).map(entry => entry.slot);
+      sourceSlots.forEach((entry, slot) => {
+        const name = M.peqName(target, slot);
+        if (!entry) { delete next.filters[name]; return; }
+        const copy = M.defaultPeq(target, slot).filter;
+        copy.parameters = clone(entry.filter.parameters);
+        next.filters[name] = copy;
       });
-    }, (before, after) => M.assertLinkedWayMutation(before, after, channel, 'peq', { slot }), { exactReadback: true });
+      syncPeq(next, target, copiedDisabled);
+    }, (before, after) => {
+      M.assertPeqMutation(before, after, target);
+      const sourceSlots = M.peqSlots(before, source);
+      const sourceNames = M.outputStage(before, source).step.names;
+      const targetNames = M.outputStage(after, target).step.names;
+      sourceSlots.forEach((entry, slot) => {
+        const copied = after.filters?.[M.peqName(target, slot)];
+        if (!!entry !== !!copied || (entry && M.fingerprint(entry.filter.parameters) !== M.fingerprint(copied.parameters)))
+          throw new Error('Copied PEQ readback differs from the source.');
+        if (entry && sourceNames.includes(entry.name) !== targetNames.includes(M.peqName(target, slot)))
+          throw new Error('Copied PEQ activation differs from the source.');
+      });
+    }, { exactReadback: true });
+    return { ...result, disabledSlots: copiedDisabled };
   }
-  async function resetLinkedPeq(channel, slot, disabledByChannel = {}) {
-    return setLinkedPeq(channel, slot, { type: 'Peaking', freq: M.PEQ_DEFAULT_FREQUENCIES[slot], gain: 0, q: .7 }, disabledByChannel);
-  }
-  async function deleteLinkedPeq(channel, slot, disabledByChannel = {}) {
-    return transact(next => {
-      M.linkedPair(channel).forEach(item => { delete next.filters[M.peqName(item, slot)]; syncPeq(next, item, disabledByChannel[item] || []); });
-    }, (before, after) => M.assertLinkedWayMutation(before, after, channel, 'peq', { slot }), { exactReadback: true });
-  }
-  window.EStackOutputProcessingService = Object.freeze({ refresh, snapshot, setGain, setLinkedGain, setMute, setPolarity, setDelay, setLinkedDelay, setHardLimiter, setCrossover, setLinkedCrossover, setPhase, setLinkedPhase, addPeq, addLinkedPeq, setPeq, setLinkedPeq, resetPeq, resetLinkedPeq, deletePeq, deleteLinkedPeq, subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener); } });
+  window.EStackOutputProcessingService = Object.freeze({ refresh, snapshot, setGain, setLinkedGain, setMute, setLinkedMute, setPolarity, setLinkedPolarity, setDelay, setLinkedDelay, setHardLimiter, setCrossover, setLinkedCrossover, setPhase, setLinkedPhase, addPeq, setPeq, resetPeq, deletePeq, copyPeq, subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener); } });
 })();

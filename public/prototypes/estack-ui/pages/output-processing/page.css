@@ -77,7 +77,8 @@ select { padding:4px 8px; touch-action:manipulation; }
 .section-head strong { font-size:11px; letter-spacing:.05em; }
 .section-head span,.section-head output { font:10px var(--data); color:var(--muted); }
 .section-head .ui-badge { border:0; padding:0; background:none; }
-#addPeq { min-height:27px; padding:3px 9px; font-size:10px; }
+.section-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+#addPeq,#copyPeq { min-height:27px; padding:3px 9px; font-size:10px; }
 .control-rack { display:grid; grid-template-columns:1.15fr 1.35fr 1.15fr 1fr .85fr; }
 .control-block { min-width:0; padding:8px 14px; border-right:1px solid var(--line); display:grid; grid-template-columns:1fr auto; align-content:start; align-items:center; gap:4px 8px; }
 .control-block:last-child { border-right:0; }
@@ -231,7 +232,7 @@ input[type=range]::-moz-range-thumb { width:14px; height:14px; border:2px solid 
   .section-head { min-height:44px; padding:7px 10px; flex-wrap:wrap; }
   .section-head>div:first-child { gap:5px; }
   .section-head span { font-size:10px; }
-  #addPeq { min-height:44px; font-size:12px; }
+  #addPeq,#copyPeq { min-height:44px; font-size:12px; }
   .peq-table-head { display:none; }
   .peq-editor { display:grid; gap:10px; padding:10px; }
   .peq-row { display:grid; grid-template-columns:24px 44px minmax(0,1fr) 48px 44px; grid-template-areas:"band power type reset delete" "freq freq freq freq freq" "gain gain gain gain gain" "q q q q q"; gap:8px 6px; padding:10px; border:1px solid var(--line); border-radius:5px; background:var(--deep); }

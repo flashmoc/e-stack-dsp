@@ -31,10 +31,9 @@
   const wayPair = channel => [2, 3].includes(channel) ? 'mid' : [4, 5].includes(channel) ? 'high' : null;
   const wayPartner = channel => channel === 2 ? 3 : channel === 3 ? 2 : channel === 4 ? 5 : channel === 5 ? 4 : null;
   const wayLinked = channel => !!wayLinks[wayPair(channel)];
-  function pairedDisabled(channel, slot, off) {
-    return Object.fromEntries(model.linkedPair(channel).map(item => [item, disabledSlots(item).filter(value => value !== slot).concat(off ? [slot] : [])]));
+  function copyDisabled(target, slots) {
+    model.PEQ_DEFAULT_FREQUENCIES.forEach((_, slot) => setDisabled(target, slot, slots.includes(slot)));
   }
-  function savePairedDisabled(channel, slot, off) { model.linkedPair(channel).forEach(item => setDisabled(item, slot, off)); }
   const locked = () => !editing || busy;
   const status = (text, kind = '') => { $('#outputState').textContent = text; $('#outputState').className = `ui-status ${kind ? `is-${kind}` : ''}`; };
   const text = (selector, value) => { const el = $(selector); if (el && el.textContent !== String(value)) el.textContent = value; };
@@ -95,8 +94,8 @@
       if (el.matches('input[type=number]')) el.readOnly = busy && !el.matches(queueable);
       el.setAttribute('aria-disabled', String(!editing || (busy && !el.matches(`${queueable},[data-nudge]`))));
     });
-    const noSharedSlot = selected() && wayLinked(selectedChannel) && model.PEQ_DEFAULT_FREQUENCIES.every((_, slot) => model.linkedPair(selectedChannel).some(item => latest.ways[item].peq[slot]));
-    $('#addPeq').disabled = locked() || !!noSharedSlot || (selected()?.peq.filter(Boolean).length || 0) >= 10;
+    $('#addPeq').disabled = locked() || (selected()?.peq.filter(Boolean).length || 0) >= 10;
+    $('#copyPeq').disabled = locked();
   }
   function updateSelector() {
     if (!$('#waySelector').children.length) {
@@ -115,7 +114,7 @@
       const pair = button.dataset.processingLink, linked = wayLinks[pair];
       button.setAttribute('aria-pressed', String(linked));
       button.textContent = `${pair.toUpperCase()} L/R · ${linked ? 'LINKED' : 'FREE'}`;
-      button.title = 'Links crossover, gain, phase, delay and PEQ edits';
+      button.title = 'Links crossover, gain, phase, delay, polarity and mute edits';
     });
   }
   function createPeqRow(slot) {
@@ -140,6 +139,14 @@
     });
     $('#peqEmpty').hidden = entries.length > 0;
     text('#peqMeta', `${entries.length} / 10 bands · ${item.name}`);
+    const source = wayPartner(item.channel), copy = $('#copyPeq');
+    copy.hidden = source === null;
+    if (source !== null) {
+      const from = model.way(source).name;
+      copy.textContent = `Copy from ${from}`;
+      copy.title = `Replace all PEQ bands on ${item.name} with ${from}`;
+      copy.setAttribute('aria-label', `Copy all parametric EQ bands from ${from} to ${item.name}`);
+    }
   }
   function updateEditors(item) {
     const g = item.gain.filter.parameters, delay = Number(item.delay.filter.parameters.delay || 0);
@@ -245,14 +252,9 @@
       if (el.dataset.peqField || el.dataset.peqSlider || el.dataset.peqType !== undefined) {
         const slot = Number(el.dataset.slot ?? el.dataset.peqType), field = el.dataset.peqField || el.dataset.peqSlider || 'type';
         const next = field === 'type' ? el.value : el.dataset.peqSlider ? peqValue(field,el.value) : Number(el.value);
-        const partner = wayLinked(channel) ? latest.ways.find(w => w.channel === wayPartner(channel)) : null;
         const source = selected().peq[slot]?.filter.parameters;
-        const partnerEntry = partner?.peq[slot]?.filter.parameters;
-        const partnerMatches = partner && partnerEntry && source && model.fingerprint(partnerEntry) === model.fingerprint(source) && disabledSlots(channel).includes(slot) === disabledSlots(partner.channel).includes(slot);
-        if (source?.[field] === next && (!partner || partnerMatches)) return;
-        const off = disabledSlots(channel).includes(slot);
-        return run(() => partner ? service.setLinkedPeq(channel, slot, {[field]:next}, pairedDisabled(channel, slot, off)) : service.setPeq(channel, slot, {[field]:next}, disabledSlots(channel)),
-          () => { if (partner) savePairedDisabled(channel, slot, off); }, {queue:true,controls});
+        if (source?.[field] === next) return;
+        return run(() => service.setPeq(channel, slot, {[field]:next}, disabledSlots(channel)), undefined, {queue:true,controls});
       }
     });
     document.addEventListener('click', e => {
@@ -279,12 +281,17 @@
         return run(() => (wayLinked(channel) ? service.setLinkedDelay : service.setDelay)(channel,clamp(Number(latest.ways.find(w=>w.channel===channel).delay.filter.parameters.delay)+delta,0,100)),undefined,{queue:true});
       }
       const item = selected(); if (!item || locked()) return; const channel = item.channel;
-      if (el.hasAttribute('data-mute')) return run(() => service.setMute(channel, !item.gain.filter.parameters.mute));
-      if (el.dataset.polarity !== undefined) return run(() => service.setPolarity(channel, el.dataset.polarity === 'true'));
-      if (el.id === 'addPeq') return run(() => wayLinked(channel) ? service.addLinkedPeq(channel, Object.fromEntries(model.linkedPair(channel).map(item => [item, disabledSlots(item)]))) : service.addPeq(channel, disabledSlots(channel)), r => {if (wayLinked(channel)) savePairedDisabled(channel,r.createdSlot,false); else setDisabled(channel,r.createdSlot,false); updateValues(); $(`[data-peq-field="freq"][data-slot="${r.createdSlot}"]`)?.focus({preventScroll:true});});
-      if (el.dataset.peqToggle !== undefined) { const slot = Number(el.dataset.peqToggle), off = !disabledSlots(channel).includes(slot); return run(() => wayLinked(channel) ? service.setLinkedPeq(channel,slot,{},pairedDisabled(channel,slot,off)) : service.setPeq(channel,slot,{},off ? [...disabledSlots(channel),slot] : disabledSlots(channel).filter(s => s !== slot)), () => wayLinked(channel) ? savePairedDisabled(channel,slot,off) : setDisabled(channel,slot,off)); }
-      if (el.dataset.peqReset !== undefined) { const slot=Number(el.dataset.peqReset), off=disabledSlots(channel).includes(slot); return run(() => wayLinked(channel) ? service.resetLinkedPeq(channel,slot,pairedDisabled(channel,slot,off)) : service.resetPeq(channel,slot,disabledSlots(channel)), () => { if(wayLinked(channel)) savePairedDisabled(channel,slot,off); }); }
-      if (el.dataset.peqDelete !== undefined) { const slot=Number(el.dataset.peqDelete); return run(() => wayLinked(channel) ? service.deleteLinkedPeq(channel,slot,pairedDisabled(channel,slot,false)) : service.deletePeq(channel,slot,disabledSlots(channel)), () => { if(wayLinked(channel)) savePairedDisabled(channel,slot,false); $('#addPeq').focus({preventScroll:true}); }); }
+      if (el.hasAttribute('data-mute')) return run(() => wayLinked(channel) ? service.setLinkedMute(channel, !item.gain.filter.parameters.mute) : service.setMute(channel, !item.gain.filter.parameters.mute));
+      if (el.dataset.polarity !== undefined) return run(() => wayLinked(channel) ? service.setLinkedPolarity(channel, el.dataset.polarity === 'true') : service.setPolarity(channel, el.dataset.polarity === 'true'));
+      if (el.id === 'copyPeq') {
+        const source = wayPartner(channel);
+        if (source === null) return;
+        return run(() => service.copyPeq(source, channel, disabledSlots(source)), result => { copyDisabled(channel, result.disabledSlots); updateValues(); });
+      }
+      if (el.id === 'addPeq') return run(() => service.addPeq(channel, disabledSlots(channel)), r => {setDisabled(channel,r.createdSlot,false); updateValues(); $(`[data-peq-field="freq"][data-slot="${r.createdSlot}"]`)?.focus({preventScroll:true});});
+      if (el.dataset.peqToggle !== undefined) { const slot = Number(el.dataset.peqToggle), off = !disabledSlots(channel).includes(slot); return run(() => service.setPeq(channel,slot,{},off ? [...disabledSlots(channel),slot] : disabledSlots(channel).filter(s => s !== slot)), () => setDisabled(channel,slot,off)); }
+      if (el.dataset.peqReset !== undefined) { const slot=Number(el.dataset.peqReset); return run(() => service.resetPeq(channel,slot,disabledSlots(channel))); }
+      if (el.dataset.peqDelete !== undefined) { const slot=Number(el.dataset.peqDelete); return run(() => service.deletePeq(channel,slot,disabledSlots(channel)), () => {setDisabled(channel,slot,false); $('#addPeq').focus({preventScroll:true});}); }
     });
   }
   function renderGraphToolbar() {

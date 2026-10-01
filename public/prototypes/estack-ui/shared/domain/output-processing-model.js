@@ -147,6 +147,22 @@
       if (fingerprint(oldFilter) !== fingerprint(nextFilter)) throw new Error('Linked Gain changed outside its permitted parameter.');
     }
   }
+  function assertLinkedGainFlagMutation(before, after, channels, field, target) {
+    const pair = linkedPair(channels[0]);
+    if (fingerprint(pair) !== fingerprint(channels.map(Number)) || !['mute', 'inverted'].includes(field)) throw new Error('Invalid linked Gain flag scope.');
+    const entries = pair.map(channel => entryForType(before, channel, 'Gain'));
+    if (entries.some(entry => !entry) || new Set(entries.map(entry => entry.name)).size !== 2) throw new Error('Linked Gain anchors must be independent.');
+    assertScoped(before, after, { filters: entries.map(entry => entry.name) });
+    for (const entry of entries) {
+      const oldFilter = clone(entry.filter);
+      const nextFilter = clone(after.filters?.[entry.name]);
+      if (!nextFilter || oldFilter.type !== 'Gain' || nextFilter.type !== 'Gain') throw new Error('Linked Gain identity changed unexpectedly.');
+      if (nextFilter.parameters?.[field] !== !!target) throw new Error(`Linked ${field} readback differs from the requested state.`);
+      delete oldFilter.parameters[field];
+      delete nextFilter.parameters[field];
+      if (fingerprint(oldFilter) !== fingerprint(nextFilter)) throw new Error(`Linked ${field} changed outside its permitted parameter.`);
+    }
+  }
   function linkedPair(channel) {
     const numeric = Number(channel);
     if ([2, 3].includes(numeric)) return [2, 3];
@@ -155,18 +171,18 @@
   }
   function restoreWayScope(before, after, channel, kind) {
     const restored = clone(after);
-    const names = kind === 'phase' ? [phaseName(channel)] : kind === 'peq' ? peqNames(channel) : kind === 'delay' ? [entryForType(before, channel, 'Delay').name] : [];
+    const names = kind === 'phase' ? [phaseName(channel)] : kind === 'delay' ? [entryForType(before, channel, 'Delay').name] : [];
     for (const name of names) {
       if (before.filters?.[name]) restored.filters[name] = clone(before.filters[name]);
       else delete restored.filters[name];
     }
-    if (kind === 'phase' || kind === 'peq') {
+    if (kind === 'phase') {
       const index = outputStage(before, channel).index;
       restored.pipeline[index] = clone(before.pipeline[index]);
     }
     return restored;
   }
-  function assertLinkedWayMutation(before, after, channel, kind, { target, slot } = {}) {
+  function assertLinkedWayMutation(before, after, channel, kind, { target } = {}) {
     const pair = linkedPair(channel);
     for (const item of pair) {
       const other = pair.find(candidate => candidate !== item);
@@ -177,15 +193,7 @@
       } else if (kind === 'phase') {
         assertPhaseMutation(before, isolated, item);
         if (phaseDegrees(after, item) !== target) throw new Error('Linked phase readback differs from the requested value.');
-      } else if (kind === 'peq') {
-        assertPeqMutation(before, isolated, item);
       } else throw new Error('Unknown linked processing scope.');
-    }
-    if (kind === 'peq') {
-      const entries = pair.map(item => after.filters?.[peqName(item, slot)]);
-      if (!!entries[0] !== !!entries[1] || (entries[0] && fingerprint(entries[0].parameters) !== fingerprint(entries[1].parameters))) throw new Error('Linked PEQ readback differs between ways.');
-      const active = pair.map(item => outputStage(after, item).step.names.includes(peqName(item, slot)));
-      if (active[0] !== active[1]) throw new Error('Linked PEQ activation differs between ways.');
     }
   }
   function assertLinkedCrossoverMutation(before, after, channel, edge) {
@@ -261,5 +269,5 @@
     const xo = Object.values(data.crossover).reduce((sum, item) => sum + crossoverMagnitude(item?.filter, frequency), 0); const peq = data.peq.reduce((sum, item) => sum + (!item || disabled.has(item.slot) ? 0 : peqMagnitude(item.filter, frequency, config.devices?.samplerate)), 0);
     return xo + peq + Number(data.gain.filter.parameters?.gain || 0);
   }
-  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, linkedPair, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, protectionPair, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertLinkedGainMutation, assertLinkedWayMutation, assertLinkedCrossoverMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
+  window.EStackOutputProcessingModel = Object.freeze({ GAIN_RANGE, normalizeGain, WAY_DEFINITIONS, PEQ_DEFAULT_FREQUENCIES, PEQ_TYPES, clone, clamp, round, fingerprint, way, linkedPair, phaseName, peqName, peqNames, validateReferences, assertReferences, outputStage, entryForType, limiterEntry, crossovers, protectionEntry, protectionPair, phaseEntry, phaseMetadata, phaseReference, phaseDegrees, phaseFrequency, peqSlots, defaultPeq, normalizePeq, isNeutralPeq, isPeqActive, crossoverOwners, discover, assertGainMutation, assertLinkedGainMutation, assertLinkedGainFlagMutation, assertLinkedWayMutation, assertLinkedCrossoverMutation, assertDelayMutation, assertLimiterMutation, assertCrossoverMutation, assertPhaseMutation, assertPeqMutation, magnitudeResponse });
 })();

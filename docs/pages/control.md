@@ -87,7 +87,10 @@ and Level Lock on a dedicated row below the protection summary.
   Silence yields `WAITING` / `PLAY SIGNAL`; automatic Input Trim is unavailable.
   The Input Trim safe-add readout says `PLAY AUDIO` while no unmuted output
   carries measurable audio; the disabled button explains the requirement.
-- MID/HIGH links apply to Gain changes only. Mute remains per selected way.
+- MID/HIGH links apply to Gain and mute changes. Muting either side of a linked
+  pair sets both ways to the requested state in one guarded transaction; in
+  FREE mode each mute remains independent. Toggling the link alone makes no
+  DSP write and does not synchronize previously different states.
   Each affected way has a compact link button between its name and dBFS readout;
   the two buttons in a pair reflect one shared state, while MID and HIGH remain
   independent. All way headers and mute buttons stay aligned.
@@ -111,7 +114,8 @@ and Level Lock on a dedicated row below the protection summary.
 When hardware is available, run the staged Control protocol:
 
 1. Read-only transport/topology/meter/spectrum validation.
-2. Reversible Master, SUB gain, MID linked gain and independent MID mute checks.
+2. Reversible Master, SUB gain, MID/HIGH linked gain and mute, then FREE-mode
+   independent mute checks.
 3. Small reversible Input Trim transaction; inspect Normalize preview first.
 4. Final complete live-config comparison against the pre-test snapshot.
 

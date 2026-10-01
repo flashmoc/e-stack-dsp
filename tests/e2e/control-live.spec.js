@@ -86,6 +86,44 @@ async function setSubGainThroughFader(frame, targetGain) {
 }
 
 test.describe('Control live CamillaNode demo', () => {
+    test('linked MID and HIGH mute both ways while free mute remains independent', async ({ page, request }) => {
+        await requireDemoRuntime(request);
+        const original = await dspCommand('GetConfigJson');
+        await page.goto('/estack-dsp/?transport=camillanode#control');
+        const frame = await controlFrame(page);
+        const names = [['mid', 2, 3, 'mid_l_gain', 'mid_r_gain'], ['high', 4, 5, 'high_l_gain', 'high_r_gain']];
+        try {
+            for (const [pair, left, right, leftName, rightName] of names) {
+                const link = frame.locator(`[data-link-toggle="${pair}"]`).first();
+                await expect(link).toHaveAttribute('aria-pressed', 'true');
+                const before = await dspCommand('GetConfigJson');
+                const target = !before.filters[leftName].parameters.mute;
+                await frame.locator(`[data-mute="${left}"]`).click();
+                await expect.poll(async () => {
+                    const config = await dspCommand('GetConfigJson');
+                    return [config.filters[leftName].parameters.mute, config.filters[rightName].parameters.mute];
+                }).toEqual([target, target]);
+                const linked = await dspCommand('GetConfigJson');
+                const scoped = clone(linked);
+                scoped.filters[leftName].parameters.mute = before.filters[leftName].parameters.mute;
+                scoped.filters[rightName].parameters.mute = before.filters[rightName].parameters.mute;
+                expect(scoped).toEqual(before);
+
+                await link.click();
+                await expect(link).toHaveAttribute('aria-pressed', 'false');
+                await frame.locator(`[data-mute="${right}"]`).click();
+                await expect.poll(async () => {
+                    const config = await dspCommand('GetConfigJson');
+                    return [config.filters[leftName].parameters.mute, config.filters[rightName].parameters.mute];
+                }).toEqual([target, !target]);
+                await link.click();
+            }
+        } finally {
+            const current = await dspCommand('GetConfigJson');
+            if (JSON.stringify(current) !== JSON.stringify(original)) await dspCommand({ SetConfigJson: JSON.stringify(original) });
+            expect(await dspCommand('GetConfigJson')).toEqual(original);
+        }
+    });
     test('compact per-way link buttons share pair state without a DSP write', async ({ page, request }) => {
         await requireDemoRuntime(request);
         const original = await dspCommand('GetConfigJson');

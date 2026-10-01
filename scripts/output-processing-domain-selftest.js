@@ -98,6 +98,30 @@ function create(config, alterReadback = null) {
   }
   await assert.rejects(() => service.setLinkedGain(0, -8), /Only MID/);
 
+  for (const [channel, pair, names] of [[3, [2, 3], ['mid_l_gain', 'mid_r_gain']], [4, [4, 5], ['high_l_gain', 'high_r_gain']]]) {
+    const domain = create(demoTopology());
+    const original = domain.get();
+    for (const [field, linkedMethod, singleMethod] of [['mute', 'setLinkedMute', 'setMute'], ['inverted', 'setLinkedPolarity', 'setPolarity']]) {
+      const before = domain.get();
+      await domain.service[linkedMethod](channel, true);
+      const linked = domain.get();
+      names.forEach(name => assert.strictEqual(linked.filters[name].parameters[field], true));
+      const scoped = clone(linked);
+      names.forEach(name => { scoped.filters[name].parameters[field] = before.filters[name].parameters[field]; });
+      assert.deepStrictEqual(scoped, before, `linked ${field} changed another DSP field`);
+      const wrongReadback = clone(linked); wrongReadback.filters[names[1]].parameters[field] = false;
+      assert.throws(() => domain.model.assertLinkedGainFlagMutation(before, wrongReadback, pair, field, true), /readback differs/);
+      const unrelated = clone(linked); unrelated.filters.sub_gain.parameters.gain = 1;
+      assert.throws(() => domain.model.assertLinkedGainFlagMutation(before, unrelated, pair, field, true), /unexpectedly/);
+      await domain.service[singleMethod](channel, false);
+      assert.strictEqual(domain.get().filters[names[0]].parameters[field], channel === pair[0] ? false : true);
+      assert.strictEqual(domain.get().filters[names[1]].parameters[field], channel === pair[1] ? false : true);
+      await domain.service[linkedMethod](channel, false);
+    }
+    assert.deepStrictEqual(domain.get(), original, 'linked mute/polarity round trip did not restore the configuration');
+  }
+  await assert.rejects(() => service.setLinkedMute(0, true), /Only MID/);
+
   const stereo = create(demoTopology());
   const stereoOriginal = stereo.get();
   await stereo.service.setLinkedDelay(3, 1.25);
@@ -115,18 +139,7 @@ function create(config, alterReadback = null) {
   await stereo.service.setLinkedCrossover(3, 'hpf', { freq: 301 });
   assert.strictEqual(stereo.get().filters.mid_hpf_300_lr24.parameters.freq, 301);
   await stereo.service.setLinkedCrossover(2, 'hpf', { freq: 300 });
-  const addedPair = await stereo.service.addLinkedPeq(2, { 2: [], 3: [] });
-  assert.strictEqual(addedPair.createdSlot, 0);
-  await stereo.service.setLinkedPeq(3, 0, { freq: 710, gain: 2, q: 1.2 }, { 2: [], 3: [] });
-  for (const channel of [2, 3]) {
-    assert.deepStrictEqual(stereo.get().filters[stereo.model.peqName(channel, 0)].parameters, { type: 'Peaking', freq: 710, gain: 2, q: 1.2 });
-    assert.ok(stereo.model.outputStage(stereo.get(), channel).step.names.includes(stereo.model.peqName(channel, 0)));
-  }
-  await stereo.service.setLinkedPeq(2, 0, {}, { 2: [0], 3: [0] });
-  for (const channel of [2, 3]) assert.ok(!stereo.model.outputStage(stereo.get(), channel).step.names.includes(stereo.model.peqName(channel, 0)));
-  await stereo.service.resetLinkedPeq(2, 0, { 2: [], 3: [] });
-  await stereo.service.deleteLinkedPeq(2, 0, { 2: [], 3: [] });
-  assert.deepStrictEqual(stereo.get(), stereoOriginal, 'linked processing round trip did not restore the exact configuration');
+  assert.deepStrictEqual(stereo.get(), stereoOriginal, 'linked delay, phase and crossover round trip did not restore the exact configuration');
 
   const highStereo = create(demoTopology());
   const highOriginal = highStereo.get();
@@ -140,12 +153,38 @@ function create(config, alterReadback = null) {
   await highStereo.service.setLinkedPhase(4, 0);
   await highStereo.service.setLinkedCrossover(4, 'hpf', { freq: 2001 });
   await highStereo.service.setLinkedCrossover(5, 'hpf', { freq: 2000 });
-  await highStereo.service.addLinkedPeq(5, { 4: [], 5: [] });
-  await highStereo.service.setLinkedPeq(4, 0, { gain: -2 }, { 4: [], 5: [] });
-  assert.strictEqual(highStereo.get().filters.USER_CH4_PEQ_01.parameters.gain, -2);
-  assert.strictEqual(highStereo.get().filters.USER_CH5_PEQ_01.parameters.gain, -2);
-  await highStereo.service.deleteLinkedPeq(4, 0, { 4: [], 5: [] });
-  assert.deepStrictEqual(highStereo.get(), highOriginal, 'linked HIGH round trip did not restore the exact configuration');
+  assert.deepStrictEqual(highStereo.get(), highOriginal, 'linked HIGH delay, phase and crossover round trip did not restore the exact configuration');
+
+  const peqPair = create(demoTopology());
+  await peqPair.service.addPeq(2);
+  await peqPair.service.setPeq(2, 0, { freq: 710, gain: 2, q: 1.2 });
+  assert.strictEqual(peqPair.get().filters.USER_CH3_PEQ_01, undefined, 'PEQ edit followed the processing link');
+  await peqPair.service.addPeq(2);
+  await peqPair.service.setPeq(2, 1, { gain: 3 }, [1]);
+  await peqPair.service.addPeq(3);
+  await peqPair.service.setPeq(3, 0, { gain: -4 });
+  await peqPair.service.addPeq(3);
+  await peqPair.service.addPeq(3);
+  await peqPair.service.setPeq(3, 2, { gain: 1 });
+  const beforeCopy = peqPair.get();
+  const copied = await peqPair.service.copyPeq(2, 3, [1]);
+  assert.deepStrictEqual(Array.from(copied.disabledSlots), [1]);
+  assert.deepStrictEqual(peqPair.get().filters.USER_CH3_PEQ_01.parameters, peqPair.get().filters.USER_CH2_PEQ_01.parameters);
+  assert.deepStrictEqual(peqPair.get().filters.USER_CH3_PEQ_02.parameters, peqPair.get().filters.USER_CH2_PEQ_02.parameters);
+  assert.strictEqual(peqPair.get().filters.USER_CH3_PEQ_03, undefined, 'copy left an extra destination band');
+  assert.ok(peqPair.model.outputStage(peqPair.get(), 3).step.names.includes('USER_CH3_PEQ_01'));
+  assert.ok(!peqPair.model.outputStage(peqPair.get(), 3).step.names.includes('USER_CH3_PEQ_02'));
+  peqPair.model.assertPeqMutation(beforeCopy, peqPair.get(), 3);
+  await peqPair.service.setPeq(2, 0, { gain: 4 }, [1]);
+  assert.strictEqual(peqPair.get().filters.USER_CH3_PEQ_01.parameters.gain, 2, 'later source edit changed copied PEQ');
+  await peqPair.service.copyPeq(3, 2, [1]);
+  assert.strictEqual(peqPair.get().filters.USER_CH2_PEQ_01.parameters.gain, 2, 'reverse copy did not update the selected destination');
+  await assert.rejects(() => peqPair.service.copyPeq(0, 2), /Only MID|opposite way/);
+  const unsupportedCopy = clone(peqPair.get());
+  unsupportedCopy.filters.USER_CH3_PEQ_01.parameters.freq = 25000;
+  const rejectedCopy = create(unsupportedCopy);
+  await assert.rejects(() => rejectedCopy.service.copyPeq(3, 2), /unsupported band/);
+  assert.deepStrictEqual(rejectedCopy.get(), unsupportedCopy, 'invalid PEQ copy wrote a DSP configuration');
 
   const separateEdges = demoTopology();
   separateEdges.filters.mid_r_hpf = clone(separateEdges.filters.mid_hpf_300_lr24);
@@ -156,12 +195,11 @@ function create(config, alterReadback = null) {
   assert.strictEqual(separate.get().filters.mid_r_hpf.parameters.freq, 315);
   await separate.service.setLinkedCrossover(3, 'hpf', { freq: 300 });
   assert.deepStrictEqual(separate.get(), separateEdges, 'distinct linked crossover filters did not round trip');
-  const changedReadback = create(demoTopology(), config => {
-    config.filters.USER_CH2_PEQ_01.parameters.gain = .1;
-    config.filters.USER_CH3_PEQ_01.parameters.gain = .1;
-    return config;
-  });
-  await assert.rejects(() => changedReadback.service.addLinkedPeq(2, { 2: [], 3: [] }), /Linked output processing readback differs/);
+  const copySource = demoTopology();
+  copySource.filters.USER_CH2_PEQ_01 = { type: 'Biquad', parameters: { type: 'Peaking', freq: 700, gain: 2, q: 1 } };
+  copySource.pipeline.find(step => step.type === 'Filter' && step.channels?.[0] === 2 && step.names.includes('mid_l_gain')).names.splice(2, 0, 'USER_CH2_PEQ_01');
+  const changedReadback = create(copySource, config => { config.filters.USER_CH3_PEQ_01.parameters.gain = .1; return config; });
+  await assert.rejects(() => changedReadback.service.copyPeq(2, 3), /Copied PEQ readback differs/);
 
   let before = get(); const midRefs = before.pipeline.filter(step => step.type === 'Filter' && [2, 3].includes(step.channels?.[0])).map(step => clone(step.names));
   await service.setCrossover(2, 'hpf', { freq: 301, family: 'LinkwitzRiley', slope: 24 }); let changed = get();
