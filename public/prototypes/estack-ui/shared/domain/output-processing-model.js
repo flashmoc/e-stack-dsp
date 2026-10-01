@@ -94,7 +94,7 @@
   function isPeqActive(filter, disabled) { return !!filter && !disabled && !isNeutralPeq(filter); }
   function crossoverOwners(config, name) { return WAY_DEFINITIONS.filter(item => outputStage(config, item.channel).step.names?.includes(name)).map(item => item.channel); }
   function discover(config) {
-    const active = P.activeOutputChannels(config).filter(channel => channel >= 0 && channel <= 5);
+    const active = P.logicalWayChannels(config);
     if (fingerprint(active) !== fingerprint(WAY_DEFINITIONS.map(item => item.channel))) throw new Error('Output Processing requires exactly E-Stack channels 0 through 5; OUT7/OUT8 are excluded.');
     return WAY_DEFINITIONS.map(definition => {
       const stage = outputStage(config, definition.channel); const gain = entryForType(config, definition.channel, 'Gain'); const delay = entryForType(config, definition.channel, 'Delay'); const limiter = limiterEntry(config, definition.channel);

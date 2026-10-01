@@ -25,7 +25,7 @@ function demoTopology() {
   const names = (prefix, hpf, lpf, gainName, delayName) => [hpf, ...(lpf ? [lpf] : []), gainName, delayName];
   return {
     devices: { samplerate: 48000, capture: { type: 'Stdin', channels: 2 }, playback: { type: 'File', channels: 8 } },
-    mixers: { routing: { mapping: [0, 1, 2, 3, 4, 5].map(dest => ({ dest, sources: [{ channel: dest, gain: 0 }] })) } },
+    mixers: { routing: { channels: { in: 2, out: 8 }, mapping: [0, 1, 2, 3, 4, 5].map(dest => ({ dest, sources: [{ channel: dest % 2, gain: 0 }] })) } },
     filters,
     processors: {
       sub_protection: { type: 'Compressor', parameters: { process_channels: [0], threshold: -12 } }, kick_protection: { type: 'Compressor', parameters: { process_channels: [1], threshold: -12 } }, mid_l_protection: { type: 'Compressor', parameters: { process_channels: [2], threshold: -12 } }, mid_r_protection: { type: 'Compressor', parameters: { process_channels: [3], threshold: -12 } }, high_l_protection: { type: 'Compressor', parameters: { process_channels: [4], threshold: -12 } }, high_r_protection: { type: 'Compressor', parameters: { process_channels: [5], threshold: -12 } }
@@ -63,6 +63,13 @@ function create(config, alterReadback = null) {
   assert.strictEqual(discovery.ways[2].crossover.hpf.name, discovery.ways[3].crossover.hpf.name);
   assert.strictEqual(discovery.ways[2].crossover.lpf.name, discovery.ways[3].crossover.lpf.name);
   assert.ok(!discovery.ways.some(item => item.stageNames.includes('GLOBAL_EQ_01')), 'pre-mixer Input Processing leaked into an output way');
+  const allMapped = demoTopology();
+  allMapped.mixers.routing.mapping.push({ dest: 6, sources: [] }, { dest: 7, sources: [] });
+  const eightDestinations = create(allMapped);
+  assert.deepStrictEqual(Array.from((await eightDestinations.service.refresh()).ways, item => item.channel), [0, 1, 2, 3, 4, 5]);
+  await eightDestinations.service.setGain(0, -11);
+  assert.deepStrictEqual(eightDestinations.get().devices, allMapped.devices);
+  assert.deepStrictEqual(eightDestinations.get().mixers, allMapped.mixers);
 
   assert.deepStrictEqual(clone(model.GAIN_RANGE), { min: -60, max: 6, step: .1 });
   const gainBaseline = get();

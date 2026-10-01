@@ -77,6 +77,24 @@ function createDomain(config) {
   assert.deepStrictEqual(Array.from(P.channelsForStep(base.pipeline[0])), [0, 1], 'modern channels schema is not normalized');
   assert.strictEqual(P.firstMixerContext(base).index, 1, 'first mixer context is wrong');
   assert.deepStrictEqual(Array.from(M.activeOutputs(base)), [0, 1, 2, 3, 4, 5], 'unused playback outputs 6/7 were treated as E-Stack ways');
+  assert.strictEqual(P.hardwarePlaybackChannels(base), 8);
+  const allMapped = clone(base);
+  allMapped.mixers.estack_preview.mapping.push({ dest: 6, sources: [{ channel: 0, gain: 0 }] }, { dest: 7, sources: [{ channel: 1, gain: 0 }] });
+  assert.deepStrictEqual(Array.from(M.activeOutputs(allMapped)), [0, 1, 2, 3, 4, 5], 'OUT7/OUT8 must never become logical ways');
+  const mappedDomain = createDomain(allMapped);
+  await mappedDomain.service.refresh();
+  await mappedDomain.service.setWayGain(0, -11);
+  assert.deepStrictEqual(mappedDomain.getConfig().mixers, allMapped.mixers, 'way gain changed physical mixer mapping');
+  assert.deepStrictEqual(mappedDomain.getConfig().devices, allMapped.devices, 'way gain changed hardware playback');
+  for (const [label, edit, error] of [
+    ['missing logical destination', next => { next.mixers.estack_preview.mapping.pop(); next.mixers.estack_preview.mapping.pop(); next.mixers.estack_preview.mapping.pop(); }, /all six E-Stack logical ways/],
+    ['duplicate destination', next => { next.mixers.estack_preview.mapping.push(clone(next.mixers.estack_preview.mapping[0])); }, /destinations must be unique/],
+    ['destination outside mixer', next => { next.mixers.estack_preview.mapping.push({ dest: 8, sources: [] }); }, /destinations must be unique and within/],
+    ['mixer hardware mismatch', next => { next.mixers.estack_preview.channels.out = 6; }, /Mixer output size must match/]
+  ]) {
+    const invalid = clone(base); edit(invalid);
+    assert.throws(() => M.activeOutputs(invalid), error, label);
+  }
   const expectedGains = ['sub_gain', 'kick_gain', 'mid_l_gain', 'mid_r_gain', 'high_l_gain', 'high_r_gain'];
   const expectedLimits = ['sub_hard_limit', 'kick_hard_limit', 'mid_l_hard_limit', 'mid_r_hard_limit', 'high_l_hard_limit', 'high_r_hard_limit'];
   expectedGains.forEach((name, channel) => {

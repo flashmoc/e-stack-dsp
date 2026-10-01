@@ -27,7 +27,7 @@
   };
   const fingerprint = value => JSON.stringify(stable(value));
   const protectedStructure = config => fingerprint({ devices: config?.devices || {}, pipeline: config?.pipeline || [], mixers: config?.mixers || {}, processors: config?.processors || {} });
-  const activeOutputs = config => P.activeOutputChannels(config);
+  const activeOutputs = config => P.logicalWayChannels(config);
   const way = channel => WAY_DEFINITIONS.find(item => item.channel === Number(channel)) || { channel: Number(channel), name: `OUT ${Number(channel) + 1}`, color: '#55d8e7' };
   const finite = value => Number.isFinite(Number(value)) ? Number(value) : null;
 
