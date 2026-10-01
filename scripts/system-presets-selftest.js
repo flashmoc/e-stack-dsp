@@ -333,6 +333,57 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
       }),
     );
     assert.deepEqual(fs.readFileSync(saved), bytes);
+    // The six named ways do not determine the physical playback or mixer size.
+    const hardwareEight = clone(original);
+    hardwareEight.devices.capture.channels = 8;
+    hardwareEight.devices.playback.channels = 8;
+    hardwareEight.mixers.main.channels = { in: 8, out: 8 };
+    hardwareEight.mixers.main.mapping = [0, 1, 2, 3, 4, 5].map(dest => ({ dest, sources: [{ channel: dest % 2, gain: 0 }] }));
+    hardwareEight.pipeline[1].channels = [0, 1, 2, 3, 4, 5];
+    for (const destinations of [[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5, 6, 7]]) {
+      config = clone(hardwareEight);
+      config.mixers.main.mapping = destinations.map(dest => ({ dest, sources: [{ channel: dest % 2, gain: 0 }] }));
+      const hardware = clone({ devices: config.devices, mixers: config.mixers });
+      const captured = await api('/api/system-presets/capture', { name: `Eight channel ${destinations.length}` });
+      assert(captured.ok, captured.body.error);
+      const eightRecord = store.read(saved).find(item => item.id === captured.body.id);
+      eightRecord.data.processing.devices = { playback: { channels: 6, device: 'wrong' } };
+      eightRecord.data.processing.mixers = { main: { channels: { in: 6, out: 6 }, mapping: [] } };
+      store.update(saved, records => {
+        const stored = records.find(item => item.id === eightRecord.id);
+        stored.data.processing.devices = clone(eightRecord.data.processing.devices);
+        stored.data.processing.mixers = clone(eightRecord.data.processing.mixers);
+      });
+      config.filters.gain.parameters.gain = -9;
+      commands.length = 0;
+      assert((await api('/api/system-presets/apply', { id: eightRecord.id })).ok);
+      assert.deepEqual({ devices: config.devices, mixers: config.mixers }, hardware, 'preset apply changed live hardware');
+      for (const write of commands.filter(item => typeof item === 'object' && item.SetConfigJson)) {
+        const uploaded = JSON.parse(write.SetConfigJson);
+        assert.deepEqual({ devices: uploaded.devices, mixers: uploaded.mixers }, hardware, 'preset upload changed hardware');
+      }
+      config = clone(hardwareEight); // Simulate CamillaDSP restarting from its hardware YAML.
+      config.mixers = clone(hardware.mixers);
+      config.filters.gain.parameters.gain = -20;
+      await system.applyRecord(eightRecord);
+      assert.equal(config.filters.gain.parameters.gain, -3, 'startup recall did not restore processing');
+      assert.deepEqual({ devices: config.devices, mixers: config.mixers }, hardware, 'startup recall changed hardware');
+    }
+    const validEight = clone(config);
+    for (const [label, edit, error] of [
+      ['mixer output size', next => { next.mixers.main.channels.out = 6; }, /destination must be within 0\.\.5/],
+      ['duplicate destination', next => { next.mixers.main.mapping[1].dest = 0; }, /duplicate destination 0/],
+      ['out-of-range destination', next => { next.mixers.main.mapping[1].dest = 8; }, /destination must be within 0\.\.7/],
+      ['missing logical way', next => { next.mixers.main.mapping = next.mixers.main.mapping.filter(item => item.dest !== 5); }, /must map all six E-Stack logical ways/],
+      ['invalid source', next => { next.mixers.main.mapping[0].sources[0].channel = 8; }, /invalid source channel/]
+    ]) {
+      config = clone(validEight); edit(config);
+      commands.length = 0;
+      const rejected = await api('/api/system-presets/apply', { id: store.read(saved).find(item => item.name === 'Eight channel 8').id });
+      assert.equal(rejected.ok, false, label);
+      assert.match(rejected.body.reason, error, label);
+      assert(!commands.some(item => typeof item === 'object'), `${label}: invalid topology caused a DSP write`);
+    }
     console.log(
       "OK: System presets capture, mixed persistence, guarded apply/readback, Master, dirty state, startup, references, failure and cross-workflow ordering",
     );

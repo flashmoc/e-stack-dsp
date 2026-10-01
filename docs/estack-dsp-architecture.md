@@ -2,6 +2,14 @@
 
 ## Product boundary
 
+E-Stack's six logical ways are SUB, KICK, MID L/R and HIGH L/R on DSP
+destinations 0..5. They are not the hardware playback channel count. On the
+RASPIAUDIO 8xIN+8xOUT deployment, `devices.playback.channels` and the mixer
+output size remain 8, whether the live mixer maps destinations 0..5 or 0..7.
+Control and Output Processing discover only the six logical ways; Advanced may
+show all eight hardware signal paths. Software cannot establish the DAC8x
+physical connector assignment.
+
 **E-Stack DSP** is the canonical frontend for E-Stack. Its mount point
 is `/estack-dsp/`, served by the standalone E-Stack DSP Node process. The legacy
 frontend remains temporarily in the repository as a behavioral specification;

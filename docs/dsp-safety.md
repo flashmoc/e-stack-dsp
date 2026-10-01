@@ -69,6 +69,15 @@ retain -60 dB and reports an error, rather than claiming the requested preset ac
 Captured Master is restricted to finite -100..0 dB; old missing/null values use
 the existing -40 dB fallback instead of accidental 0 dB.
 
+Preset validation now checks the live mixer input/output sizes, source and
+destination indices, duplicate destinations, the final hardware playback size,
+and destinations 0..5 for six-way E-Stack processing. It accepts 8-channel
+playback with either mappings 0..5 or 0..7. Invalid topology is rejected before
+the Master is attenuated or the DSP configuration is written. Preset apply and
+startup recall copy only filters, processors and pipeline into a clone of the
+live configuration; live `devices` and `mixers` remain authoritative even if a
+stored record contains those keys.
+
 ## Advanced edits and paired output protection
 
 Both are server-owned typed operations, serialized through the same workflow

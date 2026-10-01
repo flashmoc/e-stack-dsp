@@ -68,6 +68,9 @@ function create(config, alterReadback = null) {
   const eightDestinations = create(allMapped);
   assert.deepStrictEqual(Array.from((await eightDestinations.service.refresh()).ways, item => item.channel), [0, 1, 2, 3, 4, 5]);
   await eightDestinations.service.setGain(0, -11);
+  await eightDestinations.service.setMute(0, true);
+  await eightDestinations.service.setCrossover(0, 'hpf', { freq: 45 });
+  await eightDestinations.service.setPeq(2, 0, { freq: 950, gain: -2, q: 1 });
   assert.deepStrictEqual(eightDestinations.get().devices, allMapped.devices);
   assert.deepStrictEqual(eightDestinations.get().mixers, allMapped.mixers);
 

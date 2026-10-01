@@ -256,19 +256,33 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
     const filters = processing.filters;
     const processors = processing.processors || {};
     const mixerNames = new Set(Object.keys(liveMixers || {}));
-    let channels = devices?.capture?.channels;
+    const captureChannels = devices?.capture?.channels;
+    const playbackChannels = devices?.playback?.channels;
+    if (!Number.isInteger(captureChannels) || captureChannels < 1 || !Number.isInteger(playbackChannels) || playbackChannels < 1)
+      throw new Error('Live hardware capture/playback channel counts are invalid');
+    let channels = captureChannels;
+    let finalMixer = null;
     for (const step of processing.pipeline) {
       if (!["Mixer", "Filter", "Processor"].includes(step?.type))
         throw new Error("Unsupported saved pipeline step");
-      if (step.type === "Mixer" && liveMixers[step.name]) {
+      if (step.type === "Mixer" && liveMixers?.[step.name]) {
         const mixer = liveMixers[step.name];
-        if (
-          channels != null &&
-          mixer.channels?.in != null &&
-          mixer.channels.in !== channels
-        )
-          throw new Error("Mixer channel count does not match live hardware");
-        channels = mixer.channels?.out ?? channels;
+        if (!Number.isInteger(mixer.channels?.in) || !Number.isInteger(mixer.channels?.out) || mixer.channels.in < 1 || mixer.channels.out < 1)
+          throw new Error(`Mixer '${step.name}' has invalid input/output channel counts`);
+        if (mixer.channels.in !== channels)
+          throw new Error(`Mixer '${step.name}' expects ${mixer.channels.in} inputs, but the preceding stage has ${channels}`);
+        if (!Array.isArray(mixer.mapping)) throw new Error(`Mixer '${step.name}' mapping is missing`);
+        const destinations = new Set();
+        for (const mapping of mixer.mapping) {
+          if (!Number.isInteger(mapping?.dest) || mapping.dest < 0 || mapping.dest >= mixer.channels.out)
+            throw new Error(`Mixer '${step.name}' destination must be within 0..${mixer.channels.out - 1}`);
+          if (destinations.has(mapping.dest)) throw new Error(`Mixer '${step.name}' has duplicate destination ${mapping.dest}`);
+          destinations.add(mapping.dest);
+          if (!Array.isArray(mapping.sources) || mapping.sources.some(source => !Number.isInteger(source?.channel) || source.channel < 0 || source.channel >= mixer.channels.in))
+            throw new Error(`Mixer '${step.name}' has an invalid source channel`);
+        }
+        channels = mixer.channels.out;
+        finalMixer = { name: step.name, destinations };
       }
       if (step?.type === "Mixer" && !mixerNames.has(step.name)) {
         throw new Error(
@@ -304,6 +318,10 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
         }
       }
     }
+    if (channels !== playbackChannels)
+      throw new Error(`Processing ends with ${channels} channels, but hardware playback requires ${playbackChannels}`);
+    if (playbackChannels >= 6 && finalMixer && [0, 1, 2, 3, 4, 5].some(channel => !finalMixer.destinations.has(channel)))
+      throw new Error(`Mixer '${finalMixer.name}' must map all six E-Stack logical ways (destinations 0..5); playback has ${playbackChannels} hardware channels`);
   }
 
   function storedVolumeFor(record, state) {
@@ -329,18 +347,16 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
     const state = readState();
     const targetVolume = storedVolumeFor(record, state);
     const ws = await openDsp();
+    let attenuated = false;
     try {
       const live = await dspRequest(ws, "GetConfigJson");
+      validateProcessingSnapshot(record.data.processing, live?.mixers, live?.devices);
       // Attenuate before swapping the processing graph. This does not make
       // the very first milliseconds of CamillaDSP boot intrinsically safe,
       // but it prevents the preset recall itself from happening at 0 dB.
       await dspRequest(ws, { SetVolume: SAFE_BOOT_VOLUME_DB });
+      attenuated = true;
 
-      validateProcessingSnapshot(
-        record.data.processing,
-        live?.mixers,
-        live?.devices,
-      );
       const next = clone(live || {});
       next.filters = clone(record.data.processing.filters || {});
       next.pipeline = clone(record.data.processing.pipeline || []);
@@ -361,7 +377,7 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
       if (!Number.isFinite(volume) || Math.abs(volume - targetVolume) > 0.05)
         throw new Error("Master readback mismatch");
     } catch (error) {
-      await dspRequest(ws, { SetVolume: SAFE_BOOT_VOLUME_DB }).catch(() => {});
+      if (attenuated) await dspRequest(ws, { SetVolume: SAFE_BOOT_VOLUME_DB }).catch(() => {});
       throw error;
     } finally {
       try {

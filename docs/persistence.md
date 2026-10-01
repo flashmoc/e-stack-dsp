@@ -33,9 +33,10 @@ state and must never be treated as the live source of truth. Current examples:
 - `estack.control.link.high`
 - historical local saved-config UI cache keys such as `savedConfigs`
 
-The MID/HIGH keys control pair interaction in Control (Gain) and Output
-Processing (Gain, Delay, phase trim, crossovers and PEQ). They do not persist
-or imply a DSP mute state.
+The MID/HIGH keys control pair interaction in Control (Gain and mute) and Output
+Processing (Gain, mute, polarity, Delay, phase trim and crossovers). PEQ is
+copied explicitly between paired ways, not automatically linked. The keys do
+not persist DSP mute state.
 
 ## Raspberry runtime state outside source control
 
