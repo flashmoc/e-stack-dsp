@@ -89,6 +89,7 @@ function createDomain(config) {
   for (const [label, edit, error] of [
     ['missing logical destination', next => { next.mixers.estack_preview.mapping.pop(); next.mixers.estack_preview.mapping.pop(); next.mixers.estack_preview.mapping.pop(); }, /all six E-Stack logical ways/],
     ['duplicate destination', next => { next.mixers.estack_preview.mapping.push(clone(next.mixers.estack_preview.mapping[0])); }, /destinations must be unique/],
+    ['null destination', next => { next.mixers.estack_preview.mapping[0].dest = null; }, /destinations must be unique and within/],
     ['destination outside mixer', next => { next.mixers.estack_preview.mapping.push({ dest: 8, sources: [] }); }, /destinations must be unique and within/],
     ['mixer hardware mismatch', next => { next.mixers.estack_preview.channels.out = 6; }, /Mixer output size must match/]
   ]) {

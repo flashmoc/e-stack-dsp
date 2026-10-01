@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const numeric = value => Number.isInteger(Number(value)) ? Number(value) : null;
+  const numeric = value => value == null || value === '' || typeof value === 'boolean' ? null : Number.isInteger(Number(value)) ? Number(value) : null;
   const LOGICAL_WAY_CHANNELS = Object.freeze([0, 1, 2, 3, 4, 5]);
 
   // CamillaDSP 4.x uses `channels: [0]`; older saved configurations use
