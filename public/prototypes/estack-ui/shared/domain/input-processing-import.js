@@ -37,9 +37,10 @@
     if (Array.isArray(parsed?.bands)) return parsed.bands;
     if (Array.isArray(parsed?.data?.bands)) return parsed.data.bands;
     if (parsed?.filters && typeof parsed.filters === 'object') {
+      const semantic=parsed.filters.ESTACK_INPUT_EQ_STATE&&window.EStackInputEqState?.read(parsed);
       const active = new Set((parsed.pipeline || []).filter(step => step?.description === model.GLOBAL_EQ_STEP_DESCRIPTION).flatMap(step => step.names || []));
       return model.GLOBAL_EQ_SLOT_NAMES.map((name, index) => {
-        const filter = parsed.filters[name]; return filter ? { ...(filter.parameters || filter), enabled: active.size ? active.has(name) : true } : { ...model.defaultBand(index), enabled: true };
+        const filter = parsed.filters[name]; return filter ? { ...(filter.parameters || filter), enabled: semantic ? !semantic.peq.disabled.includes(name) : active.size ? active.has(name) : true } : { ...model.defaultBand(index), enabled: true };
       });
     }
     return null;

@@ -2,20 +2,20 @@
   'use strict';
   const model = window.EStackInputProcessingModel;
   const pipeline = window.EStackPipeline;
+  const stateModel = window.EStackInputEqState;
   if (!model || !pipeline) throw new Error('Input Processing domain prerequisites are unavailable.');
   const listeners = new Set();
-  let latest = null;
+  let latest = null, generation = 0;
   const clone = model.clone;
   const emit = snapshot => listeners.forEach(listener => listener(snapshot));
   const stepByDescription = (config, description) => (config.pipeline || []).find(step => step?.type === 'Filter' && step?.description === description) || null;
-  const canonicalNames = names => [...new Set(names)].sort((a, b) => model.GLOBAL_EQ_SLOT_NAMES.indexOf(a) - model.GLOBAL_EQ_SLOT_NAMES.indexOf(b));
   const disabledSet = slots => new Set((slots || []).map(model.slotName));
 
   async function getConfig() { return clone(await window.EStackDSPBridge.command('GetConfigJson')); }
   function snapshot(config) {
-    return Object.freeze({ config: clone(config), slots: model.bandsFromConfig(config), delay: model.delayFromConfig(config), sampleRate: model.sampleRateForConfig(config), mode: window.EStackDSPBridge.mode });
+    return Object.freeze({ config: clone(config), eq: stateModel.read(config), slots: model.bandsFromConfig(config), delay: model.delayFromConfig(config), sampleRate: model.sampleRateForConfig(config), mode: window.EStackDSPBridge.mode });
   }
-  async function refresh() { latest = snapshot(await getConfig()); emit(latest); return latest; }
+  async function refresh() { const request=++generation, config=await getConfig(); if(request===generation){latest=snapshot(config);emit(latest);} return latest; }
   function requireInputTopology(config) {
     const mixer = pipeline.firstMixerContext(config);
     if (!mixer) throw new Error('Input Processing requires a mixer stage.');
@@ -29,24 +29,25 @@
     config.pipeline.splice(mixer.index, 0, step); return step;
   }
   function removeDedicatedStep(config, description) { config.pipeline = (config.pipeline || []).filter(step => step?.description !== description); }
-  async function upload(before, next, assertion) {
-    try { assertion(before, next); } catch (error) { error.message = `Mutation preflight failed: ${error.message}`; throw error; }
-    await window.EStackDSPBridge.command({ SetConfigJson: JSON.stringify(next) });
-    const after = await getConfig(); try { assertion(before, after); } catch (error) { error.message = `Mutation readback failed: ${error.message}`; throw error; } latest = snapshot(after); emit(latest); return latest;
+  async function upload(before, next, scope) {
+    ++generation; // Do not publish a poll started before this transaction.
+    stateModel.assertMutation(before,next,scope);
+    const result = await window.EStackDSPBridge.api('/api/input-processing', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,before,next})});
+    const after=result.config;
+    stateModel.assertMutation(before,after,scope);
+    latest = snapshot(after); emit(latest); return latest;
   }
   function currentBands(config) { return model.bandsFromConfig(config); }
-  function applyGlobalStep(config, allBands, disabledSlots) {
-    const disabled = disabledSet(disabledSlots);
-    const names = allBands.filter(band => !disabled.has(band.slot) && !model.isNeutral(band) && !!config.filters?.[band.slot]).map(band => band.slot);
-    if (!names.length) { removeDedicatedStep(config, model.GLOBAL_EQ_STEP_DESCRIPTION); return; }
-    const step = ensureStep(config, model.GLOBAL_EQ_STEP_DESCRIPTION); step.names = canonicalNames(names);
+  function applyGlobalStep(config, allBands, disabledSlots, state=stateModel.read(config)) {
+    if(disabledSlots) state.peq.disabled=[...disabledSet(disabledSlots)];
+    stateModel.rebuild(config,state);
   }
   async function setBand(slot, patch, options = {}) {
     const before = await getConfig(); requireInputTopology(before); const next = clone(before); const index = model.slotIndex(slot); const name = model.slotName(index);
     const old = currentBands(before)[index]; const candidate = model.normalizeBand(index, { ...old, ...patch, present: true });
     if (model.isDefaultBand(candidate)) delete next.filters[name]; else next.filters[name] = model.filterForBand(candidate);
-    applyGlobalStep(next, currentBands(next), options.disabledSlots || []);
-    return upload(before, next, model.assertEqMutation);
+    applyGlobalStep(next, currentBands(next), options.disabledSlots, stateModel.read(before));
+    return upload(before, next, 'peq');
   }
   async function applyBands(bands, options = {}) {
     if (!Array.isArray(bands)) throw new Error('Global EQ import must contain bands.');
@@ -55,13 +56,13 @@
     complete.forEach(band => {
       if (model.isDefaultBand(band)) delete next.filters[band.slot]; else next.filters[band.slot] = model.filterForBand(band);
     });
-    applyGlobalStep(next, currentBands(next), options.disabledSlots || []);
-    return upload(before, next, model.assertEqMutation);
+    applyGlobalStep(next, currentBands(next), options.disabledSlots || [], stateModel.read(before));
+    return upload(before, next, 'peq');
   }
   async function setBandsEnabled(disabledSlots) {
     const before = await getConfig(); requireInputTopology(before); const next = clone(before);
     applyGlobalStep(next, currentBands(next), disabledSlots);
-    return upload(before, next, model.assertEqMutation);
+    return upload(before, next, 'peq');
   }
   async function addBands(additions, options = {}) {
     if (!Array.isArray(additions) || !additions.length) throw new Error('No EQ bands to add.');
@@ -73,13 +74,14 @@
       unique.add(slot);
       next.filters[slot] = model.filterForBand(band);
     });
-    applyGlobalStep(next, currentBands(next), options.disabledSlots || []);
-    return upload(before, next, model.assertEqMutation);
+    applyGlobalStep(next, currentBands(next), options.disabledSlots, stateModel.read(before));
+    return upload(before, next, 'peq');
   }
   async function resetAll(options = {}) {
     const before = await getConfig(); requireInputTopology(before); const next = clone(before);
     model.GLOBAL_EQ_SLOT_NAMES.forEach(name => delete next.filters[name]); removeDedicatedStep(next, model.GLOBAL_EQ_STEP_DESCRIPTION);
-    return upload(before, next, model.assertEqMutation);
+    const state=stateModel.read(before);state.peq.disabled=[];stateModel.rebuild(next,state);
+    return upload(before, next, 'peq');
   }
   async function setDelay(value) {
     const before = await getConfig(); requireInputTopology(before); const next = clone(before); const delay = model.normalizeDelay(value);
@@ -88,8 +90,22 @@
       next.filters[model.INPUT_DELAY_FILTER] = { type: 'Delay', description: 'E-Stack shared L/R input delay', parameters: { delay, unit: 'ms', subsample: false } };
       const step = ensureStep(next, model.INPUT_DELAY_STEP_DESCRIPTION); step.names = [model.INPUT_DELAY_FILTER];
     }
-    return upload(before, next, model.assertDelayMutation);
+    stateModel.rebuild(next,stateModel.read(before));
+    return upload(before, next, 'delay');
+  }
+  async function setProcessorEnabled(processor, enabled) {
+    if(!['geq','peq'].includes(processor)||typeof enabled!=='boolean') throw new Error('Invalid EQ processor state.');
+    const before=await getConfig(), next=clone(before), state=stateModel.read(before);
+    state[processor].enabled=enabled; stateModel.rebuild(next,state);
+    return upload(before,next,processor);
+  }
+  async function setGraphicEq(targets, enabled) {
+    const before=await getConfig(),next=clone(before),state=stateModel.read(before);
+    state.geq.targets=targets; if(enabled!==undefined) state.geq.enabled=enabled;
+    stateModel.rebuild(next,state,{fitGeq:true});
+    return upload(before,next,'geq');
   }
   async function readSpectrum() { return window.EStackDSPBridge.spectrumCommand('GetPlaybackSignalPeak'); }
-  window.EStackInputProcessingService = Object.freeze({ refresh, setBand, applyBands, setBandsEnabled, addBands, resetAll, setDelay, readSpectrum, get snapshot() { return latest; }, subscribe(listener) { listeners.add(listener); if (latest) listener(latest); return () => listeners.delete(listener); } });
+  async function readCapturePeaks() { return window.EStackDSPBridge.command('GetCaptureSignalPeak'); }
+  window.EStackInputProcessingService = Object.freeze({ refresh, setBand, applyBands, setBandsEnabled, addBands, resetAll, setDelay, setGraphicEq, setProcessorEnabled, readSpectrum, readCapturePeaks, get snapshot() { return latest; }, subscribe(listener) { listeners.add(listener); if (latest) listener(latest); return () => listeners.delete(listener); } });
 })();

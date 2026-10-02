@@ -353,18 +353,18 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
     try {
       const live = await dspRequest(ws, "GetConfigJson");
       validateProcessingSnapshot(record.data.processing, live?.mixers, live?.devices);
+      const next = clone(live || {});
+      next.filters = clone(record.data.processing.filters || {});
+      next.pipeline = clone(record.data.processing.pipeline || []);
+      next.processors = clone(record.data.processing.processors || {});
+      next.title = record.name || record.data.processing.title || next.title || "";
+      const inputEq = require('../public/prototypes/estack-ui/shared/domain/input-eq-state');
+      if (next.filters[inputEq.STATE]) inputEq.rebuild(next, inputEq.read(next), {fitGeq:true});
       // Attenuate before swapping the processing graph. This does not make
       // the very first milliseconds of CamillaDSP boot intrinsically safe,
       // but it prevents the preset recall itself from happening at 0 dB.
       await dspRequest(ws, { SetVolume: SAFE_BOOT_VOLUME_DB });
       attenuated = true;
-
-      const next = clone(live || {});
-      next.filters = clone(record.data.processing.filters || {});
-      next.pipeline = clone(record.data.processing.pipeline || []);
-      next.processors = clone(record.data.processing.processors || {});
-      next.title =
-        record.name || record.data.processing.title || next.title || "";
 
       // Preserve devices/chunksize/ALSA settings and live mixer routing.
       await dspRequest(ws, { SetConfigJson: JSON.stringify(next) });
@@ -640,6 +640,7 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
           live.mixers,
           live.devices,
         );
+        if (live.filters?.ESTACK_INPUT_EQ_STATE) require('../public/prototypes/estack-ui/shared/domain/input-eq-state').validate(live);
         return store.update(savedConfigsFile, (records) => {
           const existing = records.find(
             (r) => r.type === SYSTEM_TYPE && r.name === name,

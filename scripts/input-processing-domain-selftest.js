@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const root = path.resolve(__dirname, '..');
-const files = ['pipeline.js', 'input-processing-model.js', 'input-processing-service.js'];
+const files = ['pipeline.js', 'input-processing-model.js', 'graphic-eq-fit.js', 'input-eq-state.js', 'input-processing-service.js'];
 const clone = value => JSON.parse(JSON.stringify(value));
 
 function topology() {
@@ -34,7 +34,7 @@ function create(config) {
     if (name === 'GetConfigJson') return clone(config);
     if (name === 'SetConfigJson') { config = JSON.parse(payload.SetConfigJson); return true; }
     throw new Error(`Unexpected command ${name}`);
-  } };
+  }, async api(url,options) { assert.strictEqual(url,'/api/input-processing'); const proposal=JSON.parse(options.body); assert.deepStrictEqual(proposal.before,config); config=proposal.next; return {config:clone(config)}; } };
   files.forEach(file => vm.runInNewContext(fs.readFileSync(path.join(root, 'public/prototypes/estack-ui/shared/domain', file), 'utf8'), context, { filename: file }));
   return { model: context.window.EStackInputProcessingModel, service: context.window.EStackInputProcessingService, get: () => clone(config) };
 }

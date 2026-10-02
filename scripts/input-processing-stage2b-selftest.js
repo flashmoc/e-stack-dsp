@@ -6,14 +6,14 @@ const path = require('path');
 const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const clone = value => JSON.parse(JSON.stringify(value));
-const sources = ['pipeline.js', 'input-processing-model.js', 'input-processing-import.js', 'input-processing-service.js', '../saved-config-client.js'];
+const sources = ['pipeline.js', 'input-processing-model.js', 'graphic-eq-fit.js', 'input-eq-state.js', 'input-processing-import.js', 'input-processing-service.js', '../saved-config-client.js'];
 
 function topology() {
   return { devices: { samplerate: 48000, capture: { channels: 2 }, playback: { channels: 8 } }, mixers: { routing: { mapping: [{ dest: 0, sources: [{ channel: 0 }] }] } }, filters: { sub_gain: { type: 'Gain', parameters: { gain: -12 } }, sub_delay: { type: 'Delay', parameters: { delay: .3, unit: 'ms', subsample: false } } }, processors: { protection: { type: 'Compressor', parameters: { threshold: -10 } } }, pipeline: [{ type: 'Mixer', name: 'routing' }, { type: 'Filter', channels: [0], names: ['sub_gain', 'sub_delay'] }, { type: 'Processor', name: 'protection' }] };
 }
 function create(config, stored) {
   const context = { window: {}, console };
-  context.window.EStackDSPBridge = { mode: 'camillanode', async command(payload) { const name = typeof payload === 'string' ? payload : Object.keys(payload)[0]; if (name === 'GetConfigJson') return clone(config); if (name === 'SetConfigJson') { config = JSON.parse(payload.SetConfigJson); return true; } throw new Error(`Unexpected ${name}`); }, async api(pathname, options = {}) { if (pathname === '/getConfigFile') return clone(stored); if (pathname === '/saveConfigFile') { const mutation = JSON.parse(options.body); assert.deepStrictEqual(mutation.base, stored); stored = mutation.records; return {}; } throw new Error(`Unexpected ${pathname}`); } };
+  context.window.EStackDSPBridge = { mode: 'camillanode', async command(payload) { const name = typeof payload === 'string' ? payload : Object.keys(payload)[0]; if (name === 'GetConfigJson') return clone(config); if (name === 'SetConfigJson') { config = JSON.parse(payload.SetConfigJson); return true; } throw new Error(`Unexpected ${name}`); }, async api(pathname, options = {}) { if (pathname === '/api/input-processing') { const proposal=JSON.parse(options.body); assert.deepStrictEqual(proposal.before,config); config=proposal.next; return {config:clone(config)}; } if (pathname === '/getConfigFile') return clone(stored); if (pathname === '/saveConfigFile') { const mutation = JSON.parse(options.body); assert.deepStrictEqual(mutation.base, stored); stored = mutation.records; return {}; } throw new Error(`Unexpected ${pathname}`); } };
   sources.forEach(file => vm.runInNewContext(fs.readFileSync(path.join(root, 'public/prototypes/estack-ui', file.startsWith('../') ? `shared/${file.slice(3)}` : `shared/domain/${file}`), 'utf8'), context, { filename: file }));
   return { model: context.window.EStackInputProcessingModel, importer: context.window.EStackInputProcessingImport, service: context.window.EStackInputProcessingService, store: context.window.EStackSavedConfigClient, getConfig: () => clone(config), getStored: () => clone(stored) };
 }
