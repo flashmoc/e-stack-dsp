@@ -84,3 +84,6 @@ rejected. No YAML or other device setting is written.
 POST /api/system-presets/rename accepts {id, name}. It keeps the record ID,
 data and creation date, rejects duplicate names and updates matching active,
 startup, last-used and boot-applied names without contacting the DSP.
+
+Input Processing dual-EQ state and its scoped transaction API are specified in
+[Input Processing](pages/input-processing.md#state-and-transaction-contract).

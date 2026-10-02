@@ -16,7 +16,7 @@ uses `EStackDSPBridge` as the only browser transport to the existing
 CamillaNode `/ws/dsp` and `/ws/spectrum` proxies. The local prototype remains
 separate; it is never an operational fallback in `transport=camillanode` mode.
 
-## Global EQ
+## Parametric EQ
 
 There are always ten stable UI slots; they are never reordered or spliced:
 
@@ -32,18 +32,11 @@ Each reset slot is `Peaking`, its canonical frequency, `0 dB` and `Q 0.70`.
 Types are `Peaking`, `Lowshelf` and `Highshelf`. Ranges are frequency
 `20…20000 Hz`, gain `−12…+12 dB`, and Q `0.1…20`.
 
-The on/off presentation state is browser-only and is stored separately for
-each named slot, for example `estack.globalEq.disabled.GLOBAL_EQ_01`. It is
-not stored in CamillaDSP. Global EQ presets serialize that presentation state
-as each band's `enabled` field, which is copied back to those browser keys
-when a preset or import is applied. A disabled slot, or a slot whose gain is
-within `abs(gain) < 0.05 dB`, is excluded from the active EQ pipeline while
-retaining its stable UI identity.
-
-The header's Enable/Disable EQ control toggles all ten slot states in one
-guarded transaction. Disabling removes the dedicated EQ pipeline step but
-keeps every filter definition and its parameters; enabling includes all
-non-neutral bands again. It does not alter Input Delay or output processing.
+Processor ON/OFF and per-band disabled states are stored with the DSP configuration,
+not browser localStorage. Turning Parametric EQ OFF preserves each band's enable
+state; turning it ON restores only enabled, non-neutral bands. Historical browser
+keys are no longer authoritative. Legacy configs infer disabled non-neutral bands
+from their absence in the active dedicated pipeline step.
 
 Active filters are represented by the dedicated pre-mixer filter step:
 
@@ -55,10 +48,71 @@ description: E-Stack global input EQ
 bypassed: false
 ```
 
-The service puts that exact step immediately before the first mixer. Its
-guarded transaction reads the live config, changes only `GLOBAL_EQ_*` filters
-and that dedicated step, uploads, reads back, and verifies all other DSP
-structure is unchanged.
+The active order immediately before the mixer is Graphic EQ → Parametric EQ →
+Input Delay. Absent, bypassed or neutral stages are omitted. Input trim/loudness
+and unrelated stages retain their existing order.
+
+## Graphic EQ and independent editors
+
+Graphic EQ provides ten target-response gains at 31, 63, 125, 250, 500, 1000,
+2000, 4000, 8000 and 16000 Hz (−12…+12 dB, 0.1 dB steps). These describe the
+combined desired response, not the hidden biquad gains. It is for tonal shaping;
+Parametric EQ retains frequency/type/gain/Q controls for corrective work such as REW.
+Both can run simultaneously. The editor tabs change presentation only, while the
+two ON/OFF switches change processing independently. Flat/Reset affects GEQ only.
+
+A shape-preserving cubic Hermite target interpolates log frequency, with constant
+edge targets outside 31 Hz–16 kHz. A deterministic Newton gain solver evaluates
+eight hidden bells and two shelves over a bounded Q/edge-frequency search. Candidate
+selection minimizes dense response error while enforcing anchor accuracy. It reuses
+the PEQ RBJ response math. No FIR, coefficient files or runtime dependencies are added.
+Generated GLOBAL_GEQ_01…10 parameters are rounded to eight decimals for identical
+browser/server validation. Flat targets generate no filters. Supported sample rates
+are 44.1–384 kHz; preset recall refits for the current hardware sample rate.
+
+At 48 kHz the WiiM Acoustic example achieves maximum anchor error 0.000012 dB
+and log-grid RMS error 0.064086 dB. This is the E-Stack interpretation of those slider
+settings, not a reverse-engineered WiiM transfer function. Alternating ±12 dB targets
+have approximately 1.27 dB RMS interpolation error between anchors; an IIR fit is an
+approximation. The graph always draws the actual biquad response, including this error.
+
+Graphic EQ presets use the mixed saved-config store with type graphic-eq and data:
+
+```json
+{"format":"estack-geq-v1","enabled":true,"bands":[{"freq":31,"gain":5.0}]}
+```
+
+The bands array must contain all ten fixed frequencies in order. Saved values are
+semantic targets; load regenerates hidden filters and changes GEQ only. WiiM Acoustic
+is built in; save, load, rename and delete use the existing saved-config client.
+PEQ retains the historical global-eq format and changes PEQ only. System Presets
+capture both processors, their bypass states, input delay and existing output processing.
+
+## State and transaction contract
+
+A reserved, unreferenced valid Gain filter ESTACK_INPUT_EQ_STATE carries a versioned
+JSON envelope in its description (prefix E-Stack input EQ state v1:). It never appears
+in pipeline names and consumes no audio processing. The envelope is:
+
+```json
+{"version":1,"geq":{"enabled":false,"fitVersion":1,"targets":[0,0,0,0,0,0,0,0,0,0]},"peq":{"enabled":true,"disabled":[]}}
+```
+
+This keeps semantic targets, enabled states, generated filters and pipeline in one
+CamillaDSP configuration transaction and in existing System Preset processing snapshots.
+The envelope is omitted for the default legacy-compatible state. Unknown versions,
+missing GEQ metadata, mismatched fits or ambiguous stage ownership are rejected.
+Reload and an E-Stack server restart reconstruct from the running DSP. A DSP/device
+restart restores the saved state through the existing configured System Preset startup
+recall; unsaved edits are not silently written to hardware YAML.
+
+EStackInputProcessingService uses EStackDSPBridge to POST /api/input-processing with
+scope (geq, peq or delay), before and next. Server-side scope validation protects
+all other processing, devices and mixers. The existing server editProcessing workflow
+serializes edits, refuses stale revisions/temporary workflows, temporarily lowers Master,
+uploads, verifies full readback and restores the previous Master. Failure after attenuation
+holds the safe level and reports an error. This safety transaction is independent of the
+headroom warning; no additional automatic gain compensation is introduced.
 
 ## Input Delay
 
@@ -87,10 +141,11 @@ protection or other processing.
 The graph is the main workspace, followed by a compact ten-band selector and
 one persistent selected-band editor. Desktop shows all ten slots in a row
 (two rows on smaller tablets); phone uses a horizontal strip. Active, neutral
-and browser-disabled bands are distinct. Each slot has a stable presentation
+and disabled bands are distinct. Each slot has a stable presentation
 color shared by its individual response, graph point and editor.
 
-The white combined curve uses the unchanged RBJ total response. Individual
+The white combined curve sums enabled GEQ and PEQ actual responses in dB. Dashed
+GEQ and PEQ curves distinguish the two contributions. Individual
 colored curves and their translucent fills use the unchanged per-band response.
 Both use the real configuration sample rate and a logarithmic 20 Hz–20 kHz
 axis. EQ uses a symmetric dB scale; real spectrum uses a separate labeled
@@ -174,3 +229,19 @@ import and preset mutations through the product, verifies protected
 configuration, and restores the exact demo DSP configuration and complete
 saved-config collection. `SIMULATION/E2E PASS != RASPBERRY HARDWARE
 ACCEPTANCE`.
+
+## Headroom display
+
+EQ MAX BOOST is sampled over the actual combined response. CAPTURE HEADROOM is
+estimated from current capture peaks; silence/unavailable telemetry shows no estimate.
+A warning appears when boost exceeds this margin. This is not output protection or
+a guarantee against clipping: it excludes upstream trim/loudness and future signal
+peaks. Existing hard limiters and safety controls are unchanged.
+
+## Dual EQ regression coverage
+
+npm test covers six deterministic fitting profiles at 44.1/48/96 kHz, semantic state,
+all four bypass combinations, ordering, isolation, hardware preservation, stale/invalid
+scoped edits, workflow exclusion, failed readback and simulated startup recall/refitting.
+input-dual-eq.spec.js additionally verifies editor tabs without DSP writes, separate
+preset round trips, System Preset recall, page reload and actual demo pipeline readback.

@@ -82,3 +82,6 @@ startup/active/last-used/boot-applied references retain their ID and get the new
 name. A metadata write failure rolls the collection back. Global EQ renaming uses
 the existing compare-and-swap client and changes only the selected record name.
 Neither operation applies processing or changes the configured startup mode.
+
+Input Processing dual-EQ state and its scoped transaction API are specified in
+[Input Processing](pages/input-processing.md#state-and-transaction-contract).
