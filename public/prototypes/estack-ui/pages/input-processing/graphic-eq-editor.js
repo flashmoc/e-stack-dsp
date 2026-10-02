@@ -29,7 +29,7 @@
       selection=null;const records=[builtin,...await store.listByType('graphic-eq')];$('#geqPresetList').replaceChildren();
       records.forEach(record=>{const button=document.createElement('button');button.className='preset-item';button.textContent=record.name;button.dataset.geqPreset=record.id;button.addEventListener('click',()=>{selection=record;$('#geqPresetName').value=record.name;$('#geqPresetList').querySelectorAll('button').forEach(el=>el.classList.toggle('is-selected',el===button));status(record.id===builtin.id?'E-Stack smooth interpretation of the WiiM slider settings.':'Select Load GEQ to apply.');render();});$('#geqPresetList').append(button);});render();
     }
-    $('#geqPresets').addEventListener('click',()=>{$('#geqPresetDialog').showModal();run(list);});
+    function openPresets() { $('#geqPresetDialog').showModal();run(list); }
     $('#geqLoadPreset').addEventListener('click',()=>run(async()=>{
       const data=selection?.data;
       if(data?.format!=='estack-geq-v1'||typeof data.enabled!=='boolean'||!Array.isArray(data.bands)||data.bands.length!==10||data.bands.some((b,i)=>b.freq!==F.FREQUENCIES[i]))throw new Error('Invalid Graphic EQ preset.');
@@ -43,6 +43,6 @@
     }));
     $('#geqRenamePreset').addEventListener('click',()=>run(async()=>{const name=prompt('New preset name',selection.name)?.trim();if(name){await store.rename(selection.id,name);await list();status('Preset renamed.');}}));
     $('#geqDeletePreset').addEventListener('click',()=>run(async()=>{if(confirm(`Delete '${selection.name}'?`)){await store.delete(selection.id);await list();status('Preset deleted.');}}));
-    return {render};
+    return {render,openPresets};
   }};
 })();

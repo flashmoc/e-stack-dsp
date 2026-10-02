@@ -88,7 +88,10 @@ is built in; save, load, rename and delete use the existing saved-config client.
 PEQ retains the historical global-eq format and changes PEQ only. System Presets
 capture both processors, their bypass states, input delay and existing output processing.
 
-Import GEQ is available from the Graphic EQ editor and preset dialog. It accepts
+The page header's Import and Presets buttons follow the visible editor tab:
+Graphic EQ opens GEQ import/presets, and Parametric EQ opens PEQ import/presets.
+The GEQ preset dialog also links to GEQ import. Switching tabs only changes
+the editor and these actions; it does not change DSP processing. GEQ import accepts
 the same REW/Equalizer APO and JSON sources as Import PEQ, plus two-column
 frequency/gain target tables. A complete ten-band file at the fixed GEQ
 frequencies supplies target gains directly. An arbitrary PEQ file is evaluated
