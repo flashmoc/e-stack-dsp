@@ -62,7 +62,7 @@
   // RBJ Audio EQ Cookbook, evaluated on the unit circle.  This is deliberately
   // pure presentation math: CamillaDSP remains the processing authority.
   function rbjCoefficients(band, sampleRate) {
-    const b = normalizeBand(band.slot, band); const rate = sampleRateForConfig({ devices: { samplerate: sampleRate } });
+    const b = band; const rate = sampleRateForConfig({ devices: { samplerate: sampleRate } });
     const omega = 2 * Math.PI * b.frequency / rate; const cos = Math.cos(omega); const sin = Math.sin(omega);
     const A = Math.pow(10, b.gain / 40); const alpha = sin / (2 * b.q); const beta = 2 * Math.sqrt(A) * alpha;
     let b0; let b1; let b2; let a0; let a1; let a2;
@@ -80,6 +80,10 @@
   }
   function responseAt(band, frequency, sampleRate) {
     if (isNeutral(band)) return 0;
+    return rawResponseAt(normalizeBand(band.slot, band), frequency, sampleRate);
+  }
+  function rawResponseAt(band, frequency, sampleRate) {
+    if (band.gain === 0) return 0;
     const c = rbjCoefficients(band, sampleRate); const omega = 2 * Math.PI * clamp(frequency, 1, sampleRate / 2 - 1) / sampleRate;
     const z1r = Math.cos(omega); const z1i = -Math.sin(omega); const z2r = Math.cos(2 * omega); const z2i = -Math.sin(2 * omega);
     const nr = c.b0 + c.b1 * z1r + c.b2 * z2r; const ni = c.b1 * z1i + c.b2 * z2i;
@@ -127,5 +131,7 @@
       if (JSON.stringify(window.EStackPipeline.channelsForStep(steps[0])) !== JSON.stringify([0, 1]) || JSON.stringify(steps[0].names) !== JSON.stringify([INPUT_DELAY_FILTER])) throw new Error('Input delay step scope is invalid.');
     }
   }
-  window.EStackInputProcessingModel = Object.freeze({ GLOBAL_EQ_DEFAULT_FREQUENCIES, GLOBAL_EQ_SLOT_NAMES, GLOBAL_EQ_STEP_DESCRIPTION, INPUT_DELAY_FILTER, INPUT_DELAY_STEP_DESCRIPTION, EQ_TYPES, clamp, clone, slotIndex, slotName, defaultBand, normalizeBand, filterForBand, isNeutral, isDefaultBand, bandsFromConfig, sampleRateForConfig, delayFromConfig, normalizeDelay, rbjCoefficients, responseAt, totalResponse, assertEqMutation, assertDelayMutation });
+  const api = Object.freeze({ GLOBAL_EQ_DEFAULT_FREQUENCIES, GLOBAL_EQ_SLOT_NAMES, GLOBAL_EQ_STEP_DESCRIPTION, INPUT_DELAY_FILTER, INPUT_DELAY_STEP_DESCRIPTION, EQ_TYPES, clamp, clone, slotIndex, slotName, defaultBand, normalizeBand, filterForBand, isNeutral, isDefaultBand, bandsFromConfig, sampleRateForConfig, delayFromConfig, normalizeDelay, rbjCoefficients, responseAt, rawResponseAt, totalResponse, assertEqMutation, assertDelayMutation });
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else window.EStackInputProcessingModel = api;
 })();
