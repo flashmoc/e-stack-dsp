@@ -11,7 +11,7 @@
   let latest = null, selectedBand = names[0], analyzerFast = true, spectrum = [], spectrumTimer;
   let disabled = new Set();
   let editor='peq', graphicEditor=null, captureHeadroom=null, refreshTimer=null, refreshing=false;
-  let dragging = null, processing = false, busy = false, pendingImport = null, selectedPresetId = null;
+  let dragging = null, processing = false, busy = false, pendingImport = null, importMode = 'peq', selectedPresetId = null;
   let operations = [], graphGeometry = null, responseCache = null, drawFrame = 0, stopped = false, hoverFrequency = null;
   const db = value => Number(value).toFixed(1).replace('-', '−');
   const hz = value => value >= 1000 ? `${Number((value / 1000).toFixed(2))} kHz` : `${Math.round(value)} Hz`;
@@ -276,17 +276,28 @@
     $('#delayReset').addEventListener('click',()=>setDelay(0));
     document.querySelectorAll('[data-nudge]').forEach(el=>el.addEventListener('click',()=>setDelay(liveDelay()+Number(el.dataset.nudge))));
     document.querySelectorAll('[data-dialog-close]').forEach(el=>el.addEventListener('click',()=>$('#'+el.dataset.dialogClose).close()));
-    $('#importEq').addEventListener('click',()=>{pendingImport=null;$('#importText').value='';$('#importFile').value='';$('#applyImport').disabled=true;$('#importPreview').replaceChildren();importStatus('Paste EQ text or choose a file, then preview.');$('#importDialog').showModal();});
+    function openImport(mode) {
+      importMode=mode;pendingImport=null;$('#importText').value='';$('#importFile').value='';$('#applyImport').disabled=true;$('#importPreview').replaceChildren();
+      $('#importTitle').textContent=mode==='geq'?'IMPORT GRAPHIC EQ':'IMPORT PARAMETRIC EQ';
+      $('#importHelp').textContent=mode==='geq'?'Use ten fixed-frequency targets (JSON, frequency/gain table, REW/Equalizer APO). Other PEQ filters are sampled into ten GEQ targets.':'REW / Equalizer APO, CSV/table text, E-Stack JSON or CamillaDSP JSON.';
+      $('#applyImport').textContent=mode==='geq'?'Apply GEQ':'Apply EQ';
+      importStatus('Paste EQ text or choose a file, then preview.');$('#importDialog').showModal();
+    }
+    $('#importEq').addEventListener('click',()=>openImport('peq'));
+    $('#geqImport').addEventListener('click',()=>openImport('geq'));
+    $('#geqImportPreset').addEventListener('click',()=>{$('#geqPresetDialog').close();openImport('geq');});
     $('#chooseImportFile').addEventListener('click',()=>$('#importFile').click());
     function invalidateImport(){pendingImport=null;$('#applyImport').disabled=true;$('#importPreview').replaceChildren();importStatus('Preview this text before applying.');}
     $('#importText').addEventListener('input',invalidateImport);
     $('#importFile').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;$('#importText').value=await file.text();invalidateImport();importStatus(`${file.name} loaded. Preview before applying.`);});
     $('#parseImport').addEventListener('click',()=>{
-      try{pendingImport=importer.parse($('#importText').value);$('#applyImport').disabled=busy;importStatus(`${pendingImport.detected} band${pendingImport.detected===1?'':'s'} detected (${pendingImport.format}).`,'success');
-        const rows=importer.completeBands(pendingImport.bands);$('#importPreview').replaceChildren(...rows.map((b,i)=>{const row=document.createElement('div');row.textContent=`${String(i+1).padStart(2,'0')} · ${hz(b.frequency)} · ${db(b.gain)} dB · Q ${b.q} · ${b.enabled===false?'Disabled':model.isNeutral(b)?'Neutral':b.type}`;return row;}));
+      try{pendingImport=importMode==='geq'?importer.parseGraphic($('#importText').value,latest?.sampleRate):importer.parse($('#importText').value);$('#applyImport').disabled=busy;
+        importStatus(`${pendingImport.detected} band${pendingImport.detected===1?'':'s'} detected (${pendingImport.format}). ${importMode==='geq'?(pendingImport.mode==='targets'?'Fixed-frequency target gains.':'PEQ response sampled at the ten GEQ frequencies.'):''}`,'success');
+        if(importMode==='geq') $('#importPreview').replaceChildren(...window.EStackGraphicEqFit.FREQUENCIES.map((frequency,i)=>{const row=document.createElement('div');row.textContent=`${String(i+1).padStart(2,'0')} · ${hz(frequency)} · ${db(pendingImport.targets[i])} dB target`;return row;}));
+        else {const rows=importer.completeBands(pendingImport.bands);$('#importPreview').replaceChildren(...rows.map((b,i)=>{const row=document.createElement('div');row.textContent=`${String(i+1).padStart(2,'0')} · ${hz(b.frequency)} · ${db(b.gain)} dB · Q ${b.q} · ${b.enabled===false?'Disabled':model.isNeutral(b)?'Neutral':b.type}`;return row;}));}
       }catch(error){invalidateImport();importStatus(error.message,'error');}
     });
-    $('#applyImport').addEventListener('click',async()=>{if(!pendingImport||busy)return;const parsed=pendingImport;try{await applyCompleteBands(parsed.bands);importStatus(`${parsed.detected} band${parsed.detected===1?'':'s'} imported.`,'success');pendingImport=null;$('#applyImport').disabled=true;}catch(error){importStatus(error.message,'error');}});
+    $('#applyImport').addEventListener('click',async()=>{if(!pendingImport||busy)return;const parsed=pendingImport;try{if(importMode==='geq') await enqueue({geqTargets:parsed.targets,enabled:true});else await applyCompleteBands(parsed.bands);importStatus(`${parsed.detected} band${parsed.detected===1?'':'s'} imported to ${importMode.toUpperCase()}.`,'success');pendingImport=null;$('#applyImport').disabled=true;}catch(error){importStatus(error.message,'error');}});
     $('#presetEq').addEventListener('click',async()=>{$('#presetDialog').showModal();presetStatus('Loading presets…');try{await refreshPresetList();presetStatus('Select a preset or save the current EQ.');}catch(error){presetStatus(error.message,'error');}});
     $('#savePreset').addEventListener('click',saveCurrentPreset);$('#loadPreset').addEventListener('click',loadSelectedPreset);$('#addPreset').addEventListener('click',addSelectedPreset);$('#deletePreset').addEventListener('click',deleteSelectedPreset);$('#renamePreset').addEventListener('click',renameSelectedPreset);
     new ResizeObserver(draw).observe($('#eqCanvas'));

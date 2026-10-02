@@ -54,6 +54,45 @@
     if (table.length) return { format: 'table', detected: Math.min(MAX_BANDS, table.length), bands: completeBands(table) };
     throw new Error('Unsupported EQ format. Use REW/Equalizer APO, CSV/table text, E-Stack JSON or CamillaDSP JSON.');
   }
+  function parseGraphic(text, sampleRate) {
+    const F = window.EStackGraphicEqFit;
+    if (!F || !Number.isFinite(sampleRate)) throw new Error('Graphic EQ import needs the live sample rate.');
+    const source = String(text || '').trim();
+    if (!source) throw new Error('Paste GEQ text or choose a file first.');
+    let document;
+    if (/^[\[{]/.test(source)) document = JSON.parse(source);
+    const raw = Array.isArray(document) ? document : document?.data?.bands ?? document?.bands;
+    if (document?.format === 'estack-geq-v1' || document?.data?.format === 'estack-geq-v1') {
+      if (!Array.isArray(raw) || raw.length !== F.FREQUENCIES.length || raw.some((band, i) => Number(band.freq) !== F.FREQUENCIES[i])) throw new Error('Graphic EQ preset needs all ten fixed frequencies in order.');
+      return { format:'graphic-eq', mode:'targets', detected:10, targets:F.targets(raw.map(b=>b.gain)) };
+    }
+    // A plain two-column frequency/gain table is explicitly a GEQ target list.
+    // Q-bearing REW/PEQ data below is instead evaluated as a transfer response.
+    if (!document) {
+      const rows = source.split(/\r?\n/).map(line => line.replace(/#.*/, '').replace(/\/\/.*/, '').trim()).filter(Boolean);
+      const twoColumn = rows.map(line => line.match(/^\s*(\d+(?:\.\d+)?)\s*(?:Hz)?\s*[,;\t ]+\s*([-+]?\d+(?:\.\d+)?)\s*(?:dB)?\s*$/i));
+      if (rows.length && twoColumn.every(Boolean)) {
+        const targets = Array(10).fill(0), used = new Set();
+        for (const row of twoColumn) {
+          const frequency = Number(row[1]), index = F.FREQUENCIES.indexOf(frequency);
+          if (index < 0 || used.has(index)) throw new Error(`Graphic EQ target frequency ${frequency} Hz is unknown or repeated.`);
+          used.add(index); targets[index] = Number(row[2]);
+        }
+        return { format:'table', mode:'targets', detected:used.size, targets:F.targets(targets) };
+      }
+    }
+    const rawBands = document ? jsonBands(document) : (()=>{const lines=source.split(/\r?\n/), apo=lines.map(apoLine).filter(Boolean);return apo.length?apo:lines.map(tableLine).filter(Boolean);})();
+    if (rawBands?.some(b=>!Number.isFinite(Number(b.gain)) || Number(b.gain)<-12 || Number(b.gain)>12)) throw new Error('Imported filter gain exceeds the Graphic EQ ±12 dB range. Reduce the source gain first.');
+    const parsed = parse(source);
+    const active = parsed.bands.slice(0,parsed.detected).filter(b=>b.enabled !== false);
+    if (parsed.detected===10 && active.length===10 && new Set(active.map(b=>b.frequency)).size===10 && active.every(b=>F.FREQUENCIES.includes(b.frequency))) {
+      const byFrequency = new Map(active.map(b=>[b.frequency,b.gain]));
+      return { format:parsed.format, mode:'targets', detected:10, targets:F.targets(F.FREQUENCIES.map(f=>byFrequency.get(f))) };
+    }
+    const response = F.FREQUENCIES.map(frequency=>active.reduce((sum,band)=>sum+model.responseAt(band,frequency,sampleRate),0));
+    if (response.some(gain=>!Number.isFinite(gain)||gain < -12.05||gain > 12.05)) throw new Error('Imported EQ exceeds the Graphic EQ ±12 dB target range. Reduce the source gain first.');
+    return { format:parsed.format, mode:'response', detected:parsed.detected, targets:F.targets(response.map(value=>Math.round(value*10)/10)) };
+  }
   function serializeBands(bands) { return completeBands(bands).map(band => ({ type: band.type, freq: band.frequency, gain: band.gain, q: band.q, enabled: band.enabled !== false })); }
   function additionsForPreset(currentBands, presetBands) {
     if (!Array.isArray(currentBands) || currentBands.length !== MAX_BANDS || !Array.isArray(presetBands) || presetBands.length > MAX_BANDS) throw new Error('Invalid Global EQ bands.');
@@ -63,5 +102,5 @@
     if (incoming.length > empty.length) throw new Error(`This preset needs ${incoming.length} free EQ slots; only ${empty.length} of ${MAX_BANDS} remain. Nothing changed.`);
     return incoming.map((band, index) => ({ ...band, slot: empty[index], present: true }));
   }
-  window.EStackInputProcessingImport = Object.freeze({ MAX_BANDS, normalizeType, normalizeRawBand, completeBands, parse, serializeBands, additionsForPreset, clone });
+  window.EStackInputProcessingImport = Object.freeze({ MAX_BANDS, normalizeType, normalizeRawBand, completeBands, parse, parseGraphic, serializeBands, additionsForPreset, clone });
 })();

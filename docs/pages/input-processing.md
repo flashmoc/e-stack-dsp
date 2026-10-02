@@ -88,6 +88,17 @@ is built in; save, load, rename and delete use the existing saved-config client.
 PEQ retains the historical global-eq format and changes PEQ only. System Presets
 capture both processors, their bypass states, input delay and existing output processing.
 
+Import GEQ is available from the Graphic EQ editor and preset dialog. It accepts
+the same REW/Equalizer APO and JSON sources as Import PEQ, plus two-column
+frequency/gain target tables. A complete ten-band file at the fixed GEQ
+frequencies supplies target gains directly. An arbitrary PEQ file is evaluated
+at those ten frequencies to make GEQ targets; the preview explicitly labels
+that conversion. Values beyond ±12 dB are rejected, not silently clipped.
+After preview, Apply GEQ turns on GEQ and refits its hidden biquads in one
+guarded transaction. PEQ, input delay, routing and output processing are
+unchanged. Import changes the active GEQ; use Save current GEQ to retain it as
+a separate GEQ preset.
+
 ## State and transaction contract
 
 A reserved, unreferenced valid Gain filter ESTACK_INPUT_EQ_STATE carries a versioned

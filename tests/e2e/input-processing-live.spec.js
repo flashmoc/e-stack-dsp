@@ -49,7 +49,8 @@ function delayProtectedView(config) {
 function assertEqScope(before, after, expectedGain) {
   expect(eqProtectedView(after)).toEqual(eqProtectedView(before));
   expect(after.filters.GLOBAL_EQ_01.parameters.gain).toBeCloseTo(expectedGain, 6);
-  const expectedNames = globalNames.filter(name => Number(name === 'GLOBAL_EQ_01' ? expectedGain : before.filters[name]?.parameters?.gain || 0) !== 0);
+  const disabled = require('../../public/prototypes/estack-ui/shared/domain/input-eq-state').read(before).peq.disabled;
+  const expectedNames = globalNames.filter(name => !disabled.includes(name) && Number(name === 'GLOBAL_EQ_01' ? expectedGain : before.filters[name]?.parameters?.gain || 0) !== 0);
   for (const name of globalNames.slice(1)) if (before.filters[name]) expect(after.filters[name]).toEqual(before.filters[name]);
   const step = after.pipeline.find(entry => entry.description === GLOBAL_STEP); expect(step).toMatchObject({ type: 'Filter', channels: [0, 1], names: expectedNames, bypassed: false });
   expect(after.pipeline.indexOf(step)).toBeLessThan(after.pipeline.findIndex(entry => entry.type === 'Mixer'));
@@ -65,15 +66,19 @@ test.describe('Input Processing live CamillaNode demo', () => {
     await page.goto('/estack-dsp/?transport=camillanode#input-processing'); keys.forEach(key => { storage[key] = null; });
     for (const key of keys) storage[key] = await page.evaluate(item => window.localStorage.getItem(item), key);
     await page.evaluate(items => items.forEach(key => window.localStorage.removeItem(key)), keys); await page.reload();
-    let frame = await inputFrame(page); const temporaryPresetName = `Stage 2B E2E ${Date.now()}`; let temporaryPresetId = null;
+    let frame = await inputFrame(page); const temporaryPresetName = `Stage 2B E2E ${Date.now()}`; let temporaryPresetId = null, baseline = original;
     page.on('dialog', dialog => dialog.accept());
     try {
+      const state = require('../../public/prototypes/estack-ui/shared/domain/input-eq-state').read(original).peq;
+      if (!state.enabled) { await frame.locator('#eqToggleAll').click(); await expect(frame.locator('#inputState')).toHaveText('EQ synchronized'); }
+      if (state.disabled.includes('GLOBAL_EQ_01')) { await frame.locator('#bandToggle').click(); await expect(frame.locator('#inputState')).toHaveText('EQ synchronized'); }
+      baseline = await dspCommand('GetConfigJson');
       await expect(page.locator('html')).toHaveAttribute('data-transport', 'live'); await expect(page.locator('.shell-context')).toContainText('DSP ONLINE');
       await expect.poll(() => frame.evaluate(() => ({ mode: window.EStackDSPBridge?.mode, page: document.documentElement.dataset.prototypePage, mock: !!window.EStackPrototypeDSP }))).toEqual({ mode: 'camillanode', page: 'input-processing', mock: false });
       await expect(frame.locator('.eq-band')).toHaveCount(10); await expect(frame.locator('[data-range]')).toHaveCount(3); await expect(frame.locator('#spectrumState')).toHaveClass(/is-live/);
       const gain = frame.locator('[data-input-slot="GLOBAL_EQ_01"][data-field="gain"]'); await gain.fill(String(testGain)); await gain.press('Tab');
       await expect.poll(async () => Number((await dspCommand('GetConfigJson')).filters.GLOBAL_EQ_01?.parameters?.gain)).toBeCloseTo(testGain, 6);
-      const eqChanged = await dspCommand('GetConfigJson'); assertEqScope(original, eqChanged, testGain);
+      const eqChanged = await dspCommand('GetConfigJson'); assertEqScope(baseline, eqChanged, testGain);
       const delay = frame.locator('#delayNumber'); await delay.fill('1.0'); await delay.press('Tab');
       await expect.poll(async () => Number((await dspCommand('GetConfigJson')).filters[DELAY_FILTER]?.parameters?.delay)).toBeCloseTo(1, 6);
       const delayChanged = await dspCommand('GetConfigJson'); expect(delayProtectedView(delayChanged)).toEqual(delayProtectedView(eqChanged)); expect(delayChanged.filters.GLOBAL_EQ_01).toEqual(eqChanged.filters.GLOBAL_EQ_01); expect(delayChanged.pipeline.find(step => step.description === GLOBAL_STEP)).toEqual(eqChanged.pipeline.find(step => step.description === GLOBAL_STEP)); expect(delayChanged.pipeline.find(step => step.description === DELAY_STEP)).toMatchObject({ type: 'Filter', channels: [0, 1], names: [DELAY_FILTER], bypassed: false });
@@ -82,7 +87,7 @@ test.describe('Input Processing live CamillaNode demo', () => {
       await delay.fill('0'); await delay.press('Tab'); await expect.poll(async () => (await dspCommand('GetConfigJson')).filters[DELAY_FILTER]).toBeUndefined();
       const delayRemoved = await dspCommand('GetConfigJson'); expect(delayProtectedView(delayRemoved)).toEqual(delayProtectedView(eqWithDelay));
       await gain.fill(String(originalEq)); await gain.press('Tab'); await expect.poll(async () => (await dspCommand('GetConfigJson')).filters.GLOBAL_EQ_01?.parameters?.gain ?? 0).toBeCloseTo(Number(originalEq), 6);
-      expect(await dspCommand('GetConfigJson')).toEqual(original);
+      expect(await dspCommand('GetConfigJson')).toEqual(baseline);
       console.log(`Input E2E GLOBAL_EQ_01 gain: ${Number(originalEq).toFixed(1)} dB -> ${testGain.toFixed(1)} dB -> ${Number(originalEq).toFixed(1)} dB`); console.log('Input E2E delay: 0.0 ms -> 1.0 ms -> 0.0 ms');
 
       await frame.locator('#importEq').click();
@@ -91,12 +96,12 @@ test.describe('Input Processing live CamillaNode demo', () => {
       await frame.locator('#applyImport').click(); await expect(frame.locator('#importStatus')).toContainText('2 bands imported');
       await expect.poll(async () => Number((await dspCommand('GetConfigJson')).filters.GLOBAL_EQ_01?.parameters?.gain)).toBeCloseTo(2.5, 6);
       const imported = await dspCommand('GetConfigJson');
-      expect(eqProtectedView(imported)).toEqual(eqProtectedView(original));
+      expect(eqProtectedView(imported)).toEqual(eqProtectedView(baseline));
       expect(imported.filters.GLOBAL_EQ_02).toMatchObject({ type: 'Biquad', parameters: { type: 'Highshelf', freq: 8000, gain: -1.5, q: .9 } });
       expect(imported.filters.GLOBAL_EQ_03).toBeUndefined();
       expect(imported.pipeline.find(step => step.description === GLOBAL_STEP)?.names).toEqual(['GLOBAL_EQ_01']);
-      expect(imported.filters[DELAY_FILTER]).toEqual(original.filters[DELAY_FILTER]);
-      expect(imported.pipeline.find(step => step.description === DELAY_STEP)).toEqual(original.pipeline.find(step => step.description === DELAY_STEP));
+      expect(imported.filters[DELAY_FILTER]).toEqual(baseline.filters[DELAY_FILTER]);
+      expect(imported.pipeline.find(step => step.description === DELAY_STEP)).toEqual(baseline.pipeline.find(step => step.description === DELAY_STEP));
       expect(await frame.evaluate(() => window.EStackInputProcessingService.snapshot.eq.peq.disabled)).toContain('GLOBAL_EQ_02');
       console.log('Input E2E import: GLOBAL_EQ_01 +2.5 dB, GLOBAL_EQ_02 −1.5 dB disabled; GLOBAL_EQ_03…10 reset.');
 
@@ -118,13 +123,13 @@ test.describe('Input Processing live CamillaNode demo', () => {
       expect(combined.filters.GLOBAL_EQ_02).toEqual(loaded.filters.GLOBAL_EQ_02);
       expect(combined.filters.GLOBAL_EQ_03.parameters).toMatchObject({ freq: 63, gain: 2.5, q: .7 });
       expect(combined.pipeline.find(step => step.description === GLOBAL_STEP).names).toEqual(['GLOBAL_EQ_01', 'GLOBAL_EQ_03']);
-      expect(eqProtectedView(combined)).toEqual(eqProtectedView(original));
+      expect(eqProtectedView(combined)).toEqual(eqProtectedView(baseline));
       await frame.locator('[data-dialog-close="presetDialog"]').click();
       await frame.locator('#eqToggleAll').click(); await expect(frame.locator('#eqToggleAll')).toHaveText('Parametric EQ · OFF');
       const bypassed = await dspCommand('GetConfigJson');
       expect(bypassed.pipeline.some(step => step.description === GLOBAL_STEP)).toBeFalsy();
       for (const name of globalNames) expect(bypassed.filters[name]).toEqual(combined.filters[name]);
-      expect(eqProtectedView(bypassed)).toEqual(eqProtectedView(original));
+      expect(eqProtectedView(bypassed)).toEqual(eqProtectedView(baseline));
       await frame.locator('#eqToggleAll').click(); await expect(frame.locator('#eqToggleAll')).toHaveText('Parametric EQ · ON');
       const reenabled = await dspCommand('GetConfigJson');
       for (const name of globalNames) expect(reenabled.filters[name]).toEqual(combined.filters[name]);

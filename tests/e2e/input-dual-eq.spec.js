@@ -3,6 +3,37 @@ const {demo,dsp}=require('./batch-helpers');
 const fs=require('fs');
 const S=require('../../public/prototypes/estack-ui/shared/domain/input-eq-state');
 const F=require('../../public/prototypes/estack-ui/shared/domain/graphic-eq-fit');
+const M=require('../../public/prototypes/estack-ui/shared/domain/input-processing-model');
+
+test('Graphic EQ imports fixed targets and sampled PEQ text without changing Parametric EQ',async({page,request})=>{
+  await demo(request);const original=await dsp('GetConfigJson'),volume=await dsp('GetVolume');
+  try {
+    await page.goto('/estack-dsp/?transport=camillanode#input-processing');
+    await expect.poll(()=>page.frames().some(f=>f.url().includes('/input-processing/page.html'))).toBe(true);
+    const frame=page.frames().find(f=>f.url().includes('/input-processing/page.html'));
+    await expect(frame.locator('#inputState')).toHaveText('EQ synchronized');
+    await frame.locator('#geqTab').click();await frame.locator('#geqPresets').click();await frame.locator('#geqImportPreset').click();
+    const fixed=F.FREQUENCIES.map((freq,i)=>`Filter ${i+1}: ON PK Fc ${freq} Hz Gain ${F.ACOUSTIC[i]} dB Q 0.7`).join('\n');
+    await frame.locator('#importFile').setInputFiles({name:'acoustic.txt',mimeType:'text/plain',buffer:Buffer.from(fixed)});
+    await frame.locator('#parseImport').click();
+    await expect(frame.locator('#importStatus')).toContainText('Fixed-frequency target gains');
+    await expect(frame.locator('#importPreview div')).toHaveCount(10);
+    await frame.locator('#applyImport').click();await expect(frame.locator('#importStatus')).toContainText('imported to GEQ');
+    let config=await dsp('GetConfigJson');expect(S.validate(config).geq.targets).toEqual(F.ACOUSTIC);
+    expect(config.devices).toEqual(original.devices);expect(config.mixers).toEqual(original.mixers);
+    for(const name of M.GLOBAL_EQ_SLOT_NAMES)expect(config.filters[name]).toEqual(original.filters[name]);
+    await frame.locator('[data-dialog-close="importDialog"]').click();
+    await frame.locator('#geqImport').click();
+    await frame.locator('#importText').fill('Filter 1: ON PK Fc 100 Hz Gain 3 dB Q 1');
+    await frame.locator('#parseImport').click();await expect(frame.locator('#importStatus')).toContainText('PEQ response sampled');
+    const expected=F.FREQUENCIES.map(freq=>Math.round(M.responseAt({slot:'GLOBAL_EQ_01',type:'Peaking',frequency:100,gain:3,q:1},freq,original.devices.samplerate)*10)/10);
+    await frame.locator('#applyImport').click();await expect(frame.locator('#importStatus')).toContainText('imported to GEQ');
+    config=await dsp('GetConfigJson');expect(S.validate(config).geq.targets).toEqual(expected);
+    for(const name of M.GLOBAL_EQ_SLOT_NAMES)expect(config.filters[name]).toEqual(original.filters[name]);
+    expect(config.devices).toEqual(original.devices);expect(config.mixers).toEqual(original.mixers);
+    expect(await dsp('GetVolume')).toBe(volume);
+  } finally {await dsp({SetConfigJson:JSON.stringify(original)});await dsp({SetVolume:volume});expect(await dsp('GetConfigJson')).toEqual(original);}
+});
 test('independent input EQ processors, target presets, actual pipeline and full system recall',async({page,request})=>{
   await demo(request);const original=await dsp('GetConfigJson'),volume=await dsp('GetVolume');
   const files=['savedConfigs.dat','startupConfig.json'],bytes=files.map(f=>fs.existsSync(f)?fs.readFileSync(f):null);
@@ -20,13 +51,15 @@ test('independent input EQ processors, target presets, actual pipeline and full 
     await frame.locator('[data-dialog-close="geqPresetDialog"]').click();
     const acoustic=await dsp('GetConfigJson');expect(S.validate(acoustic).geq.targets).toEqual(F.ACOUSTIC);
     expect(acoustic.devices).toEqual(original.devices);expect(acoustic.mixers).toEqual(original.mixers);
-    for(const name of Object.keys(original.filters)) expect(acoustic.filters[name]).toEqual(original.filters[name]);
+    for(const name of Object.keys(original.filters).filter(name=>name!==S.STATE&&!S.GEQ_NAMES.includes(name))) expect(acoustic.filters[name]).toEqual(original.filters[name]);
     expect(acoustic.pipeline.findIndex(s=>s.description===S.GEQ_STEP)).toBeLessThan(acoustic.pipeline.findIndex(s=>s.type==='Mixer'));
     await expect(frame.locator('#geqToggle')).toHaveText('Graphic EQ · ON');
     await frame.locator('#geqPresets').click();await frame.locator('#geqPresetName').fill('Acoustic target test');await frame.locator('#geqSavePreset').click();await expect(frame.locator('#geqPresetStatus')).toContainText('saved');await frame.locator('[data-dialog-close="geqPresetDialog"]').click();
     await frame.locator('#geqReset').click();await expect.poll(async()=>S.read(await dsp('GetConfigJson')).geq.targets).toEqual(Array(10).fill(0));
     await frame.locator('#geqPresets').click();await frame.locator('.preset-item',{hasText:'Acoustic target test'}).click();await frame.locator('#geqLoadPreset').click();await expect(frame.locator('#geqPresetStatus')).toContainText('loaded');await frame.locator('[data-dialog-close="geqPresetDialog"]').click();
     await frame.locator('#peqTab').click();
+    if(!S.read(await dsp('GetConfigJson')).peq.enabled){await frame.locator('#eqToggleAll').click();await expect(frame.locator('#inputState')).toHaveText('EQ synchronized');}
+    if(S.read(await dsp('GetConfigJson')).peq.disabled.includes('GLOBAL_EQ_01')){await frame.locator('#bandToggle').click();await expect(frame.locator('#inputState')).toHaveText('EQ synchronized');}
     const gain=frame.locator('[data-input-slot="GLOBAL_EQ_01"][data-field="gain"]');await gain.fill('-3');await gain.press('Tab');await expect(frame.locator('#inputState')).toHaveText('EQ synchronized');
     await frame.locator('#delayNumber').fill('1');await frame.locator('#delayNumber').press('Tab');await expect(frame.locator('#inputState')).toHaveText('EQ synchronized');
     const both=await dsp('GetConfigJson');
