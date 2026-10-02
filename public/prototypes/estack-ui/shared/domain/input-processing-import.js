@@ -54,5 +54,13 @@
     throw new Error('Unsupported EQ format. Use REW/Equalizer APO, CSV/table text, E-Stack JSON or CamillaDSP JSON.');
   }
   function serializeBands(bands) { return completeBands(bands).map(band => ({ type: band.type, freq: band.frequency, gain: band.gain, q: band.q, enabled: band.enabled !== false })); }
-  window.EStackInputProcessingImport = Object.freeze({ MAX_BANDS, normalizeType, normalizeRawBand, completeBands, parse, serializeBands, clone });
+  function additionsForPreset(currentBands, presetBands) {
+    if (!Array.isArray(currentBands) || currentBands.length !== MAX_BANDS || !Array.isArray(presetBands) || presetBands.length > MAX_BANDS) throw new Error('Invalid Global EQ bands.');
+    const incoming = completeBands(presetBands).filter(band => band.enabled && !model.isNeutral(band));
+    if (!incoming.length) throw new Error('This preset has no enabled EQ bands to add.');
+    const empty = currentBands.filter(band => !band.present).map(band => band.slot);
+    if (incoming.length > empty.length) throw new Error(`This preset needs ${incoming.length} free EQ slots; only ${empty.length} of ${MAX_BANDS} remain. Nothing changed.`);
+    return incoming.map((band, index) => ({ ...band, slot: empty[index], present: true }));
+  }
+  window.EStackInputProcessingImport = Object.freeze({ MAX_BANDS, normalizeType, normalizeRawBand, completeBands, parse, serializeBands, additionsForPreset, clone });
 })();

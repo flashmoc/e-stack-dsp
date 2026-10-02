@@ -40,6 +40,11 @@ when a preset or import is applied. A disabled slot, or a slot whose gain is
 within `abs(gain) < 0.05 dB`, is excluded from the active EQ pipeline while
 retaining its stable UI identity.
 
+The header's Enable/Disable EQ control toggles all ten slot states in one
+guarded transaction. Disabling removes the dedicated EQ pipeline step but
+keeps every filter definition and its parameters; enabling includes all
+non-neutral bands again. It does not alter Input Delay or output processing.
+
 Active filters are represented by the dedicated pre-mixer filter step:
 
 ```yaml
@@ -129,6 +134,13 @@ delete must never remove `estack-system` or any other record type.
 The product's shared `EStackSavedConfigClient` owns those collection
 operations. A preset has the historical contract below; exactly ten bands are
 saved in stable slot order and Input Delay is deliberately excluded.
+
+`Load EQ` replaces the current ten-band EQ. `Add to current` instead takes
+only the selected preset's enabled, non-neutral bands, appends them in preset
+order to empty `GLOBAL_EQ_*` slots, and preserves occupied filters and their
+disabled state. It rejects the entire addition before upload if too few of
+the ten slots are empty. Neither action changes Input Delay, mixer routing,
+hardware channels, or other DSP processing.
 
 ```json
 {

@@ -57,6 +57,15 @@ function create(config) {
   assert.deepStrictEqual(changed.devices, original.devices); assert.deepStrictEqual(changed.mixers, original.mixers); assert.deepStrictEqual(changed.processors, original.processors);
   assert.deepStrictEqual(changed.filters.sub_peq, original.filters.sub_peq); assert.deepStrictEqual(changed.filters.sub_delay, original.filters.sub_delay); assert.deepStrictEqual(changed.filters.sub_limit, original.filters.sub_limit);
   const activeEqFilter = clone(changed.filters.GLOBAL_EQ_01); const activeEqStep = clone(globalStep);
+  await service.setBandsEnabled(['GLOBAL_EQ_01']);
+  let bypassed = get();
+  assert.strictEqual(bypassed.pipeline.some(step => step.description === model.GLOBAL_EQ_STEP_DESCRIPTION), false, 'global toggle did not bypass EQ');
+  assert.deepStrictEqual(bypassed.filters.GLOBAL_EQ_01, activeEqFilter, 'global toggle changed filter parameters');
+  assert.deepStrictEqual(bypassed.devices, original.devices); assert.deepStrictEqual(bypassed.mixers, original.mixers);
+  await service.setBandsEnabled([]);
+  changed = get();
+  assert.deepStrictEqual(changed.filters.GLOBAL_EQ_01, activeEqFilter, 'global toggle did not restore filter parameters');
+  assert.deepStrictEqual(changed.pipeline.find(step => step.description === model.GLOBAL_EQ_STEP_DESCRIPTION), activeEqStep, 'global toggle did not restore EQ step');
   await service.setDelay(1);
   changed = get(); assert.deepStrictEqual(changed.filters.ESTACK_INPUT_DELAY, { type: 'Delay', description: 'E-Stack shared L/R input delay', parameters: { delay: 1, unit: 'ms', subsample: false } });
   assert.deepStrictEqual(changed.pipeline.find(step => step.description === model.INPUT_DELAY_STEP_DESCRIPTION).channels, [0, 1]);

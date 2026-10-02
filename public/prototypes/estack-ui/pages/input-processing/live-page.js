@@ -21,7 +21,7 @@
   const disabledSlots = () => [...effectiveDisabled()];
   function liveBands() {
     let bands = (latest?.slots || names.map(model.defaultBand)).map(band => ({...band}));
-    operations.forEach(op => { if (op.bands) bands = op.bands.map(b => ({...b})); if (op.slot) { const i = model.slotIndex(op.slot); bands[i] = model.normalizeBand(i, {...bands[i], ...op.patch}); } });
+    operations.forEach(op => { if (op.bands) bands = op.bands.map(b => ({...b})); if (op.additions) op.additions.forEach(b => { bands[model.slotIndex(b.slot)] = {...b}; }); if (op.slot) { const i = model.slotIndex(op.slot); bands[i] = model.normalizeBand(i, {...bands[i], ...op.patch}); } });
     if (dragging?.slot) { const i = model.slotIndex(dragging.slot); bands[i] = model.normalizeBand(i, {...bands[i], ...dragging.patch}); }
     return bands;
   }
@@ -32,8 +32,9 @@
   function persistDisabled() { names.forEach(slot => localStorage.setItem(disabledKey(slot), String(disabled.has(slot)))); }
   function setBusy() {
     busy = operations.length > 0;
-    document.querySelectorAll('#eqReset,#bandReset,#savePreset,#loadPreset,#deletePreset').forEach(el => { el.disabled = busy || !latest; });
+    document.querySelectorAll('#eqReset,#eqToggleAll,#bandReset,#savePreset,#loadPreset,#addPreset,#deletePreset').forEach(el => { el.disabled = busy || !latest; });
     $('#loadPreset').disabled = busy || !selectedPresetId;
+    $('#addPreset').disabled = busy || !selectedPresetId;
     $('#deletePreset').disabled = busy || !selectedPresetId;
     $('#renamePreset').disabled = busy || !selectedPresetId;
     $('#applyImport').disabled = busy || !pendingImport;
@@ -51,6 +52,8 @@
       const op = operations[0]; setStatus('Applying…', 'pending');
       try {
         if (op.bands) await service.applyBands(op.bands,{disabledSlots:op.disabled});
+        else if (op.additions) await service.addBands(op.additions,{disabledSlots:op.disabled});
+        else if (op.toggleAll) await service.setBandsEnabled(op.disabled);
         else if (op.reset) await service.resetAll();
         else if (op.slot) await service.setBand(op.slot,op.patch,{disabledSlots:op.disabled});
         else await service.setDelay(op.delay);
@@ -99,6 +102,10 @@
     document.querySelectorAll('[data-input-slot]').forEach(el=>{el.dataset.inputSlot=band.slot;writeValue(el,band[el.dataset.field],force);});
     document.querySelectorAll('[data-range]').forEach(el=>{const value=band[el.dataset.range];writeValue(el,el.dataset.range==='frequency'?Math.log(value/20)/Math.log(1000)*1000:value,force);el.setAttribute('aria-valuetext',el.dataset.range==='frequency'?hz(value):String(value));});
     $('#eqActiveCount').textContent=`${activeBands().length} active`;
+    const allDisabled = off.size === names.length;
+    $('#eqToggleAll').textContent = allDisabled ? 'Enable EQ' : 'Disable EQ';
+    $('#eqToggleAll').setAttribute('aria-pressed', String(!allDisabled));
+    $('#eqToggleAll').title = allDisabled ? 'Restore all EQ bands without changing their settings' : 'Bypass all EQ bands without changing their settings';
     const delay=liveDelay();writeValue($('#delayRange'),delay,force);writeValue($('#delayNumber'),delay.toFixed(1),force);
     $('#delayReadout').textContent=`${delay.toFixed(1)} ms`;$('#delayState').textContent=delay>0?'Active':'Bypassed';$('#delayState').dataset.active=String(delay>0);
     $('#sampleRate').textContent=`${Number(latest.sampleRate)/1000} kHz · L/R`;
@@ -200,6 +207,19 @@
       await applyCompleteBands(record.data.bands, `Preset '${record.name}'`); presetStatus(`'${record.name}' loaded.`, 'success');
     } catch (error) { presetStatus(`LOAD ERROR · ${error.message}`, 'error'); }
   }
+  async function addSelectedPreset() {
+    if (!selectedPresetId) { presetStatus('Select a preset first.', 'error'); return; }
+    try {
+      if (busy) throw new Error('Wait for the current edit to finish.');
+      const record = await savedConfigs.getById(selectedPresetId);
+      if (!record || record.type !== 'global-eq' || record.data?.format !== 'estack-global-eq-v1' || !Array.isArray(record.data?.bands)) throw new Error('Invalid Global EQ preset.');
+      const additions = importer.additionsForPreset(liveBands(), record.data.bands);
+      const off = effectiveDisabled();
+      if (off.size !== names.length) additions.forEach(band => off.delete(band.slot));
+      await enqueue({additions, disabled:[...off]});
+      presetStatus(`${additions.length} band${additions.length === 1 ? '' : 's'} from '${record.name}' added.`, 'success');
+    } catch (error) { presetStatus(`ADD ERROR · ${error.message}`, 'error'); }
+  }
   async function renameSelectedPreset() {
     if (!selectedPresetId) return;
     try {
@@ -230,6 +250,7 @@
     $('#eqCanvas').addEventListener('pointermove',event=>{if(event.pointerType!=='mouse'||dragging||!graphGeometry)return;const box=event.currentTarget.getBoundingClientRect(),g=graphGeometry;hoverFrequency=20*Math.pow(1000,clamp((event.clientX-box.left-g.left)/g.plotW,0,1));draw();});
     $('#eqCanvas').addEventListener('pointerleave',()=>{hoverFrequency=null;draw();});
     $('#bandToggle').addEventListener('click',()=>{if(!latest)return;const off=effectiveDisabled();if(off.has(selectedBand))off.delete(selectedBand);else off.add(selectedBand);commitBand(selectedBand,{},[...off]);});
+    $('#eqToggleAll').addEventListener('click',()=>{if(!latest||busy)return;enqueue({toggleAll:true,disabled:effectiveDisabled().size===names.length?[]:[...names]}).catch(()=>{});});
     $('#bandType').addEventListener('change',e=>commitBand(selectedBand,{type:e.target.value}));
     $('#bandReset').addEventListener('click',()=>commitBand(selectedBand,model.defaultBand(model.slotIndex(selectedBand)),disabledSlots().filter(s=>s!==selectedBand)));
     document.querySelectorAll('[data-input-slot]').forEach(el=>{
@@ -253,7 +274,7 @@
     });
     $('#applyImport').addEventListener('click',async()=>{if(!pendingImport||busy)return;const parsed=pendingImport;try{await applyCompleteBands(parsed.bands);importStatus(`${parsed.detected} band${parsed.detected===1?'':'s'} imported.`,'success');pendingImport=null;$('#applyImport').disabled=true;}catch(error){importStatus(error.message,'error');}});
     $('#presetEq').addEventListener('click',async()=>{$('#presetDialog').showModal();presetStatus('Loading presets…');try{await refreshPresetList();presetStatus('Select a preset or save the current EQ.');}catch(error){presetStatus(error.message,'error');}});
-    $('#savePreset').addEventListener('click',saveCurrentPreset);$('#loadPreset').addEventListener('click',loadSelectedPreset);$('#deletePreset').addEventListener('click',deleteSelectedPreset);$('#renamePreset').addEventListener('click',renameSelectedPreset);
+    $('#savePreset').addEventListener('click',saveCurrentPreset);$('#loadPreset').addEventListener('click',loadSelectedPreset);$('#addPreset').addEventListener('click',addSelectedPreset);$('#deletePreset').addEventListener('click',deleteSelectedPreset);$('#renamePreset').addEventListener('click',renameSelectedPreset);
     new ResizeObserver(draw).observe($('#eqCanvas'));
   }
   mount();bind();setBusy();service.subscribe(snapshot=>{latest={...snapshot,slots:snapshot.slots.map(b=>({...b}))};render();});

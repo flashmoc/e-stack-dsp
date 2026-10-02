@@ -58,6 +58,24 @@
     applyGlobalStep(next, currentBands(next), options.disabledSlots || []);
     return upload(before, next, model.assertEqMutation);
   }
+  async function setBandsEnabled(disabledSlots) {
+    const before = await getConfig(); requireInputTopology(before); const next = clone(before);
+    applyGlobalStep(next, currentBands(next), disabledSlots);
+    return upload(before, next, model.assertEqMutation);
+  }
+  async function addBands(additions, options = {}) {
+    if (!Array.isArray(additions) || !additions.length) throw new Error('No EQ bands to add.');
+    const before = await getConfig(); requireInputTopology(before); const next = clone(before);
+    const unique = new Set();
+    additions.forEach(band => {
+      const slot = model.slotName(band.slot);
+      if (unique.has(slot) || next.filters?.[slot]) throw new Error(`EQ slot ${slot} is already occupied. Nothing changed.`);
+      unique.add(slot);
+      next.filters[slot] = model.filterForBand(band);
+    });
+    applyGlobalStep(next, currentBands(next), options.disabledSlots || []);
+    return upload(before, next, model.assertEqMutation);
+  }
   async function resetAll(options = {}) {
     const before = await getConfig(); requireInputTopology(before); const next = clone(before);
     model.GLOBAL_EQ_SLOT_NAMES.forEach(name => delete next.filters[name]); removeDedicatedStep(next, model.GLOBAL_EQ_STEP_DESCRIPTION);
@@ -73,5 +91,5 @@
     return upload(before, next, model.assertDelayMutation);
   }
   async function readSpectrum() { return window.EStackDSPBridge.spectrumCommand('GetPlaybackSignalPeak'); }
-  window.EStackInputProcessingService = Object.freeze({ refresh, setBand, applyBands, resetAll, setDelay, readSpectrum, get snapshot() { return latest; }, subscribe(listener) { listeners.add(listener); if (latest) listener(latest); return () => listeners.delete(listener); } });
+  window.EStackInputProcessingService = Object.freeze({ refresh, setBand, applyBands, setBandsEnabled, addBands, resetAll, setDelay, readSpectrum, get snapshot() { return latest; }, subscribe(listener) { listeners.add(listener); if (latest) listener(latest); return () => listeners.delete(listener); } });
 })();
