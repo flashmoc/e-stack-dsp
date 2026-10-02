@@ -41,7 +41,7 @@ async function inputFrame(page) {
   return page.frames().find(frame => new URL(frame.url()).pathname.endsWith('/pages/input-processing/page.html'));
 }
 function eqProtectedView(config) {
-  const next = clone(config); globalNames.forEach(name => delete next.filters[name]); next.pipeline = next.pipeline.filter(step => step.description !== GLOBAL_STEP); return next;
+  const next = clone(config); globalNames.forEach(name => delete next.filters[name]); delete next.filters.ESTACK_INPUT_EQ_STATE; next.pipeline = next.pipeline.filter(step => step.description !== GLOBAL_STEP); return next;
 }
 function delayProtectedView(config) {
   const next = clone(config); delete next.filters[DELAY_FILTER]; next.pipeline = next.pipeline.filter(step => step.description !== DELAY_STEP); return next;
@@ -97,7 +97,7 @@ test.describe('Input Processing live CamillaNode demo', () => {
       expect(imported.pipeline.find(step => step.description === GLOBAL_STEP)?.names).toEqual(['GLOBAL_EQ_01']);
       expect(imported.filters[DELAY_FILTER]).toEqual(original.filters[DELAY_FILTER]);
       expect(imported.pipeline.find(step => step.description === DELAY_STEP)).toEqual(original.pipeline.find(step => step.description === DELAY_STEP));
-      expect(await frame.evaluate(key => window.localStorage.getItem(key), 'estack.globalEq.disabled.GLOBAL_EQ_02')).toBe('true');
+      expect(await frame.evaluate(() => window.EStackInputProcessingService.snapshot.eq.peq.disabled)).toContain('GLOBAL_EQ_02');
       console.log('Input E2E import: GLOBAL_EQ_01 +2.5 dB, GLOBAL_EQ_02 −1.5 dB disabled; GLOBAL_EQ_03…10 reset.');
 
       await frame.locator('[data-dialog-close="importDialog"]').click(); await frame.locator('#presetEq').click();
@@ -120,15 +120,15 @@ test.describe('Input Processing live CamillaNode demo', () => {
       expect(combined.pipeline.find(step => step.description === GLOBAL_STEP).names).toEqual(['GLOBAL_EQ_01', 'GLOBAL_EQ_03']);
       expect(eqProtectedView(combined)).toEqual(eqProtectedView(original));
       await frame.locator('[data-dialog-close="presetDialog"]').click();
-      await frame.locator('#eqToggleAll').click(); await expect(frame.locator('#eqToggleAll')).toHaveText('Enable EQ');
+      await frame.locator('#eqToggleAll').click(); await expect(frame.locator('#eqToggleAll')).toHaveText('Parametric EQ · OFF');
       const bypassed = await dspCommand('GetConfigJson');
       expect(bypassed.pipeline.some(step => step.description === GLOBAL_STEP)).toBeFalsy();
       for (const name of globalNames) expect(bypassed.filters[name]).toEqual(combined.filters[name]);
       expect(eqProtectedView(bypassed)).toEqual(eqProtectedView(original));
-      await frame.locator('#eqToggleAll').click(); await expect(frame.locator('#eqToggleAll')).toHaveText('Disable EQ');
+      await frame.locator('#eqToggleAll').click(); await expect(frame.locator('#eqToggleAll')).toHaveText('Parametric EQ · ON');
       const reenabled = await dspCommand('GetConfigJson');
       for (const name of globalNames) expect(reenabled.filters[name]).toEqual(combined.filters[name]);
-      expect(reenabled.pipeline.find(step => step.description === GLOBAL_STEP).names).toEqual(['GLOBAL_EQ_01', 'GLOBAL_EQ_02', 'GLOBAL_EQ_03']);
+      expect(reenabled.pipeline.find(step => step.description === GLOBAL_STEP).names).toEqual(['GLOBAL_EQ_01', 'GLOBAL_EQ_03']);
       await frame.locator('#presetEq').click(); await frame.locator(`[data-preset-id="${temporaryPresetId}"]`).click();
       await frame.locator('#deletePreset').click(); await expect(frame.locator('#presetStatus')).toContainText('deleted');
       const savedAfterDelete = await loadSavedConfigs(request); expect(savedAfterDelete.some(record => record.id === temporaryPresetId)).toBeFalsy(); expect(savedAfterDelete).toEqual(originalSavedConfigs);
@@ -148,7 +148,7 @@ test.describe('Input EQ touch workspace', () => {
   test('keeps controls stable, queues edits, and commits touch previews only on release', async ({page,request}) => {
     test.setTimeout(90000);await requireDemoRuntime(request);const original=await dspCommand('GetConfigJson');
     let writes=0,hold=false,release=null;
-    await page.routeWebSocket('**/ws/dsp',ws=>{const server=ws.connectToServer();ws.onMessage(message=>{if(String(message).includes('SetConfigJson'))writes++;server.send(message);});server.onMessage(message=>{if(hold&&String(message).includes('SetConfigJson')){hold=false;release=()=>ws.send(message);}else ws.send(message);});});
+    await page.route('**/api/input-processing',async route=>{writes++;const response=await route.fetch();if(hold){hold=false;await new Promise(resolve=>{release=resolve;});}await route.fulfill({response});});
     page.on('dialog',dialog=>dialog.accept());const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto('/estack-dsp/?transport=camillanode#input-processing');const frame=await inputFrame(page);
     const cdp=await page.context().newCDPSession(page);

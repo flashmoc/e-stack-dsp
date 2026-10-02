@@ -7,10 +7,10 @@
   const names = model.GLOBAL_EQ_SLOT_NAMES;
   const bandColors = ['#58cce4','#ed83bd','#ebae59','#78d19a','#809eec','#b693e8','#ed887a','#bfce72','#62c5ba','#d4a37f'];
   const spectrumFrequencies = [25,30,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000];
-  const disabledKey = slot => `estack.globalEq.disabled.${slot}`;
   const clamp = model.clamp;
   let latest = null, selectedBand = names[0], analyzerFast = true, spectrum = [], spectrumTimer;
-  let disabled = new Set(names.filter(slot => localStorage.getItem(disabledKey(slot)) === 'true'));
+  let disabled = new Set();
+  let editor='peq', graphicEditor=null, captureHeadroom=null, refreshTimer=null, refreshing=false;
   let dragging = null, processing = false, busy = false, pendingImport = null, selectedPresetId = null;
   let operations = [], graphGeometry = null, responseCache = null, drawFrame = 0, stopped = false, hoverFrequency = null;
   const db = value => Number(value).toFixed(1).replace('-', '−');
@@ -29,10 +29,9 @@
   const activeBands = () => liveBands().filter(band => !effectiveDisabled().has(band.slot) && !model.isNeutral(band));
   const serializableBands = () => importer.serializeBands(liveBands().map(band => ({...band,enabled:!effectiveDisabled().has(band.slot)})));
   function setStatus(text, state = '') { $('#inputState').textContent = text; $('#inputState').dataset.state = state; }
-  function persistDisabled() { names.forEach(slot => localStorage.setItem(disabledKey(slot), String(disabled.has(slot)))); }
   function setBusy() {
     busy = operations.length > 0;
-    document.querySelectorAll('#eqReset,#eqToggleAll,#bandReset,#savePreset,#loadPreset,#addPreset,#deletePreset').forEach(el => { el.disabled = busy || !latest; });
+    document.querySelectorAll('#eqReset,#eqToggleAll,#geqToggle,#bandReset,#savePreset,#loadPreset,#addPreset,#deletePreset').forEach(el => { el.disabled = busy || !latest; });
     $('#loadPreset').disabled = busy || !selectedPresetId;
     $('#addPreset').disabled = busy || !selectedPresetId;
     $('#deletePreset').disabled = busy || !selectedPresetId;
@@ -53,11 +52,12 @@
       try {
         if (op.bands) await service.applyBands(op.bands,{disabledSlots:op.disabled});
         else if (op.additions) await service.addBands(op.additions,{disabledSlots:op.disabled});
-        else if (op.toggleAll) await service.setBandsEnabled(op.disabled);
+        else if (op.processor) await service.setProcessorEnabled(op.processor,op.enabled);
+        else if (op.geqTargets) await service.setGraphicEq(op.geqTargets,op.enabled);
         else if (op.reset) await service.resetAll();
         else if (op.slot) await service.setBand(op.slot,op.patch,{disabledSlots:op.disabled});
         else await service.setDelay(op.delay);
-        disabled = new Set(op.disabled); persistDisabled(); operations.shift(); op.resolve(true);
+        disabled = new Set(latest.eq.peq.disabled); operations.shift(); op.resolve(true);
       } catch(error) {
         const failed = operations; operations = []; dragging = null;
         await service.refresh().catch(() => {}); failed.forEach(item => item.reject(error));
@@ -102,10 +102,13 @@
     document.querySelectorAll('[data-input-slot]').forEach(el=>{el.dataset.inputSlot=band.slot;writeValue(el,band[el.dataset.field],force);});
     document.querySelectorAll('[data-range]').forEach(el=>{const value=band[el.dataset.range];writeValue(el,el.dataset.range==='frequency'?Math.log(value/20)/Math.log(1000)*1000:value,force);el.setAttribute('aria-valuetext',el.dataset.range==='frequency'?hz(value):String(value));});
     $('#eqActiveCount').textContent=`${activeBands().length} active`;
-    const allDisabled = off.size === names.length;
-    $('#eqToggleAll').textContent = allDisabled ? 'Enable EQ' : 'Disable EQ';
-    $('#eqToggleAll').setAttribute('aria-pressed', String(!allDisabled));
-    $('#eqToggleAll').title = allDisabled ? 'Restore all EQ bands without changing their settings' : 'Bypass all EQ bands without changing their settings';
+    for(const [id,processor,label] of [['eqToggleAll','peq','Parametric EQ'],['geqToggle','geq','Graphic EQ']]) {
+      const enabled=latest.eq[processor].enabled;
+      $('#'+id).textContent=`${label} · ${enabled?'ON':'OFF'}`;
+      $('#'+id).setAttribute('aria-pressed',String(enabled));
+      $('#'+id).title=enabled?'Bypass this processor; keep its settings':'Enable this processor';
+    }
+    graphicEditor?.render();
     const delay=liveDelay();writeValue($('#delayRange'),delay,force);writeValue($('#delayNumber'),delay.toFixed(1),force);
     $('#delayReadout').textContent=`${delay.toFixed(1)} ms`;$('#delayState').textContent=delay>0?'Active':'Bypassed';$('#delayState').dataset.active=String(delay>0);
     $('#sampleRate').textContent=`${Number(latest.sampleRate)/1000} kHz · L/R`;
@@ -153,15 +156,18 @@
     const w=box.width,h=box.height,ratio=Math.min(devicePixelRatio||1,2);if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);}
     const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
     const left=w<600?35:46,right=w<600?34:44,top=24,bottom=28,plotW=w-left-right,plotH=h-top-bottom;
-    const bands=liveBands(),off=disabledSlots();const key=JSON.stringify([bands,off,latest.sampleRate,plotW]);
+    const bands=liveBands(),off=latest.eq.peq.enabled?disabledSlots():[...names];
+    const geq=latest.eq.geq.enabled?window.EStackInputEqState.GEQ_NAMES.filter(n=>latest.config.pipeline.some(s=>!s.bypassed&&s.names?.includes(n))).map(n=>{const p=latest.config.filters[n].parameters;return {...p,frequency:p.freq};}):[];
+    const key=JSON.stringify([bands,off,geq,latest.sampleRate,plotW]);
     if(responseCache?.key!==key){
-      const values=[],individual=bands.map(()=>[]);
+      const values=[],peqValues=[],geqValues=[],individual=bands.map(()=>[]);
       for(let x=0;x<=plotW;x+=2){
         const frequency=20*Math.pow(1000,x/plotW);
-        values.push({x,value:model.totalResponse(bands,frequency,latest.sampleRate,off)});
+        const peqValue=model.totalResponse(bands,frequency,latest.sampleRate,off),geqValue=window.EStackGraphicEqFit.response(geq,frequency,latest.sampleRate);
+        values.push({x,value:peqValue+geqValue});peqValues.push({x,value:peqValue});geqValues.push({x,value:geqValue});
         bands.forEach((band,i)=>{if(!off.includes(band.slot)&&!model.isNeutral(band))individual[i].push({x,value:model.responseAt(band,frequency,latest.sampleRate)});});
       }
-      responseCache={key,values,individual};
+      responseCache={key,values,peqValues,geqValues,individual};
     }
     const max=Math.max(...responseCache.values.map(v=>Math.abs(v.value)));const range=dragging?.geometry?.range||Math.max(18,Math.ceil(max/6)*6);
     graphGeometry={left,right,top,bottom,plotW,plotH,range};const xFor=f=>left+Math.log(f/20)/Math.log(1000)*plotW,yFor=v=>top+(range-v)/(2*range)*plotH,ySpectrum=v=>top+(0-clamp(v,-96,0))/96*plotH;
@@ -172,24 +178,31 @@
     ctx.save();ctx.beginPath();ctx.rect(left,top,plotW,plotH);ctx.clip();
     if(spectrum.length){ctx.beginPath();ctx.moveTo(xFor(spectrumFrequencies[0]),h-bottom);spectrum.forEach((value,i)=>ctx.lineTo(xFor(spectrumFrequencies[i]),ySpectrum(value)));ctx.lineTo(xFor(spectrumFrequencies.at(-1)),h-bottom);ctx.closePath();ctx.fillStyle='rgba(135,161,172,.06)';ctx.fill();ctx.beginPath();spectrum.forEach((value,i)=>i?ctx.lineTo(xFor(spectrumFrequencies[i]),ySpectrum(value)):ctx.moveTo(xFor(spectrumFrequencies[i]),ySpectrum(value)));ctx.strokeStyle='rgba(149,175,185,.42)';ctx.lineWidth=1.2;ctx.stroke();}
     responseCache.individual.forEach((curve,i)=>{
-      if(!curve.length)return;
+      if(!curve.length||editor!=='peq')return;
       const selected=bands[i].slot===selectedBand;
       ctx.beginPath();ctx.moveTo(left,yFor(0));curve.forEach(({x,value})=>ctx.lineTo(left+x,yFor(value)));ctx.lineTo(left+curve.at(-1).x,yFor(0));ctx.closePath();
       ctx.fillStyle=bandColors[i];ctx.globalAlpha=selected?.28:.18;ctx.fill();
       ctx.beginPath();curve.forEach(({x,value},index)=>index?ctx.lineTo(left+x,yFor(value)):ctx.moveTo(left+x,yFor(value)));ctx.strokeStyle=bandColors[i];ctx.globalAlpha=selected?.95:.65;ctx.lineWidth=selected?1.7:1;ctx.stroke();ctx.globalAlpha=1;
     });
-    const selected=bands[model.slotIndex(selectedBand)];const sx=xFor(selected.frequency);ctx.fillStyle='rgba(89,213,227,.035)';ctx.fillRect(sx-12,top,24,plotH);ctx.strokeStyle='rgba(89,213,227,.35)';ctx.setLineDash([3,5]);ctx.beginPath();ctx.moveTo(sx,top);ctx.lineTo(sx,h-bottom);ctx.stroke();ctx.setLineDash([]);
+    const selected=bands[model.slotIndex(selectedBand)];const sx=xFor(selected.frequency);if(editor==='peq'){ctx.fillStyle='rgba(89,213,227,.035)';ctx.fillRect(sx-12,top,24,plotH);ctx.strokeStyle='rgba(89,213,227,.35)';ctx.setLineDash([3,5]);ctx.beginPath();ctx.moveTo(sx,top);ctx.lineTo(sx,h-bottom);ctx.stroke();ctx.setLineDash([]);}
+    for(const [curve,color] of [[responseCache.geqValues,'#edb467'],[responseCache.peqValues,'#58cce4']]) {ctx.beginPath();curve.forEach(({x,value},i)=>i?ctx.lineTo(left+x,yFor(value)):ctx.moveTo(left+x,yFor(value)));ctx.strokeStyle=color;ctx.lineWidth=1.4;ctx.setLineDash([5,4]);ctx.stroke();ctx.setLineDash([]);}
     ctx.beginPath();responseCache.values.forEach(({x,value},i)=>i?ctx.lineTo(left+x,yFor(value)):ctx.moveTo(left+x,yFor(value)));ctx.strokeStyle='#e6f7fa';ctx.lineWidth=2.6;ctx.stroke();ctx.restore();
-    if(hoverFrequency!==null&&!dragging){const x=xFor(hoverFrequency),value=model.totalResponse(bands,hoverFrequency,latest.sampleRate,off);ctx.strokeStyle='#78989d';ctx.setLineDash([2,4]);ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#e4f9fb';ctx.beginPath();ctx.arc(x,yFor(value),3,0,Math.PI*2);ctx.fill();}
+    if(hoverFrequency!==null&&!dragging){const x=xFor(hoverFrequency),value=model.totalResponse(bands,hoverFrequency,latest.sampleRate,off)+window.EStackGraphicEqFit.response(geq,hoverFrequency,latest.sampleRate);ctx.strokeStyle='#78989d';ctx.setLineDash([2,4]);ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#e4f9fb';ctx.beginPath();ctx.arc(x,yFor(value),3,0,Math.PI*2);ctx.fill();}
     document.querySelectorAll('[data-point]').forEach(el=>{const b=bands[model.slotIndex(el.dataset.point)],selected=b.slot===selectedBand;el.hidden=!selected&&(off.includes(b.slot)||model.isNeutral(b));el.dataset.selected=String(selected);el.dataset.disabled=String(off.includes(b.slot));el.style.left=`${xFor(b.frequency)}px`;el.style.top=`${yFor(b.gain)}px`;el.setAttribute('aria-label',`Band ${number(b.slot)}, ${hz(b.frequency)}, ${db(b.gain)} dB. Drag to adjust.`);});
     $('#graphReadout').textContent=`${dragging?'Preview · ':''}Band ${number(selectedBand)} · ${hz(selected.frequency)} · ${selected.gain>0?'+':''}${db(selected.gain)} dB · Q ${selected.q.toFixed(2)}`;
-    if(hoverFrequency!==null&&!dragging)$('#graphReadout').textContent=`${hz(hoverFrequency)} · EQ response ${db(model.totalResponse(bands,hoverFrequency,latest.sampleRate,off))} dB`;
+    if(editor==='geq') $('#graphReadout').textContent='Graphic EQ · fitted IIR response';
+    const boost=Math.max(0,...responseCache.values.map(v=>v.value));
+    $('#eqMaxBoost').textContent=`+${boost.toFixed(1)} dB`;
+    $('#eqHeadroom').textContent=captureHeadroom===null?'—':`${captureHeadroom.toFixed(1)} dB`;
+    $('#eqHeadroomStatus').textContent=captureHeadroom===null?'No input estimate':boost>captureHeadroom?'EQ exceeds capture headroom':'OK · capture estimate';
+    $('#eqHeadroomStatus').dataset.warning=String(captureHeadroom!==null&&boost>captureHeadroom);
+    if(hoverFrequency!==null&&!dragging)$('#graphReadout').textContent=`${hz(hoverFrequency)} · EQ response ${db(model.totalResponse(bands,hoverFrequency,latest.sampleRate,off)+window.EStackGraphicEqFit.response(geq,hoverFrequency,latest.sampleRate))} dB`;
   }
   function importStatus(text, state = '') { const output = $('#importStatus'); output.textContent = text; output.dataset.state = state; }
   function presetStatus(text, state = '') { const output = $('#presetStatus'); output.textContent = text; output.dataset.state = state; }
   async function refreshPresetList() {
     const list = $('#presetList'); const records = await savedConfigs.listByType('global-eq'); selectedPresetId = null; list.replaceChildren(); setBusy();
-    if (!records.length) { const empty = document.createElement('p'); empty.className = 'preset-empty'; empty.textContent = 'No saved Global EQ presets.'; list.append(empty); return records; }
+    if (!records.length) { const empty = document.createElement('p'); empty.className = 'preset-empty'; empty.textContent = 'No saved Parametric EQ presets.'; list.append(empty); return records; }
     records.forEach(record => { const button = document.createElement('button'); button.type = 'button'; button.className = 'preset-item'; button.dataset.presetId = String(record.id); button.textContent = record.name; button.addEventListener('click', () => { selectedPresetId = String(record.id); list.querySelectorAll('.preset-item').forEach(item => item.classList.toggle('is-selected', item === button)); $('#presetName').value = record.name; presetStatus(`Selected '${record.name}'.`); setBusy(); }); list.append(button); }); return records;
   }
   async function saveCurrentPreset() {
@@ -250,7 +263,8 @@
     $('#eqCanvas').addEventListener('pointermove',event=>{if(event.pointerType!=='mouse'||dragging||!graphGeometry)return;const box=event.currentTarget.getBoundingClientRect(),g=graphGeometry;hoverFrequency=20*Math.pow(1000,clamp((event.clientX-box.left-g.left)/g.plotW,0,1));draw();});
     $('#eqCanvas').addEventListener('pointerleave',()=>{hoverFrequency=null;draw();});
     $('#bandToggle').addEventListener('click',()=>{if(!latest)return;const off=effectiveDisabled();if(off.has(selectedBand))off.delete(selectedBand);else off.add(selectedBand);commitBand(selectedBand,{},[...off]);});
-    $('#eqToggleAll').addEventListener('click',()=>{if(!latest||busy)return;enqueue({toggleAll:true,disabled:effectiveDisabled().size===names.length?[]:[...names]}).catch(()=>{});});
+    for(const [id,processor] of [['eqToggleAll','peq'],['geqToggle','geq']]) $('#'+id).addEventListener('click',()=>{if(!latest||busy)return;enqueue({processor,enabled:!latest.eq[processor].enabled}).catch(()=>{});});
+    for(const name of ['geq','peq']) $('#'+name+'Tab').addEventListener('click',()=>{editor=name;$('#geqEditor').hidden=name!=='geq';$('#peqEditor').hidden=name!=='peq';$('#eqPoints').hidden=name!=='peq';for(const tab of ['geq','peq']) $('#'+tab+'Tab').setAttribute('aria-pressed',String(tab===name));draw();});
     $('#bandType').addEventListener('change',e=>commitBand(selectedBand,{type:e.target.value}));
     $('#bandReset').addEventListener('click',()=>commitBand(selectedBand,model.defaultBand(model.slotIndex(selectedBand)),disabledSlots().filter(s=>s!==selectedBand)));
     document.querySelectorAll('[data-input-slot]').forEach(el=>{
@@ -277,7 +291,8 @@
     $('#savePreset').addEventListener('click',saveCurrentPreset);$('#loadPreset').addEventListener('click',loadSelectedPreset);$('#addPreset').addEventListener('click',addSelectedPreset);$('#deletePreset').addEventListener('click',deleteSelectedPreset);$('#renamePreset').addEventListener('click',renameSelectedPreset);
     new ResizeObserver(draw).observe($('#eqCanvas'));
   }
-  mount();bind();setBusy();service.subscribe(snapshot=>{latest={...snapshot,slots:snapshot.slots.map(b=>({...b}))};render();});
+  mount();bind();graphicEditor=window.EStackGraphicEqEditor.create({snapshot:()=>latest,commit:(geqTargets,enabled)=>{if(busy) return Promise.reject(new Error('Wait for the current edit to finish.'));return enqueue({geqTargets,enabled});}});setBusy();service.subscribe(snapshot=>{latest={...snapshot,slots:snapshot.slots.map(b=>({...b}))};disabled=new Set(snapshot.eq.peq.disabled);render();});
+  refreshTimer=setInterval(async()=>{if(stopped||busy||dragging||refreshing)return;refreshing=true;try{await service.refresh();const peaks=await service.readCapturePeaks();const peak=Math.max(...peaks.slice(0,2));captureHeadroom=Number.isFinite(peak)&&peak>-90?Math.max(0,-peak):null;}catch(_){captureHeadroom=null;}finally{refreshing=false;}draw();},2000);
   service.refresh().then(()=>{setStatus('EQ synchronized','success');pollSpectrum();}).catch(error=>setStatus(`Unavailable · ${error.message}`,'error'));
-  window.addEventListener('beforeunload',()=>{stopped=true;clearTimeout(spectrumTimer);cancelAnimationFrame(drawFrame);});
+  window.addEventListener('beforeunload',()=>{stopped=true;clearTimeout(spectrumTimer);clearInterval(refreshTimer);cancelAnimationFrame(drawFrame);});
 })();

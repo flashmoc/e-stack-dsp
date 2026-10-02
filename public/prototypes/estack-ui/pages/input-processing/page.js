@@ -6,7 +6,7 @@
   });
   document.documentElement.dataset.prototypePage = hardware ? 'input-processing' : 'input-processing-local';
   const start = hardware
-    ? load('./live-page.js?v=input-eq-add-20261002')
+    ? load('./live-page.js?v=dual-input-eq-1')
     : load('../../shared/mock-camilladsp.js').then(() => load('./fixtures.js')).then(() => load('./local-page.js'));
   start.catch(error => {
     document.body.innerHTML = `<main class="input-page"><section class="ui-panel"><h1>Input Processing unavailable</h1><p>${error.message}</p></section></main>`;
