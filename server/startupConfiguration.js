@@ -939,8 +939,8 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
         attenuated = true;
         await dspRequest(ws, { SetVolume: safeVolume });
         await dspRequest(ws, { SetConfigJson: JSON.stringify(next) });
-        const actual = await dspRequest(ws, "GetConfigJson");
-        if (revision(actual) !== revision(next)) throw new Error("Processing readback mismatch");
+        const actual = await require("./processingReadback")
+          .waitForProcessingReadback(() => dspRequest(ws, "GetConfigJson"), next);
         await dspRequest(ws, { SetVolume: volume });
         const actualVolume = await dspRequest(ws, "GetVolume");
         if (!Number.isFinite(actualVolume) || Math.abs(actualVolume - volume) > .05) throw new Error("Master readback mismatch");

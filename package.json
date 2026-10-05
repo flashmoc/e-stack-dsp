@@ -8,6 +8,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "check": "node scripts/repo-check.js",
+    "pretest": "node scripts/processing-readback-selftest.js",
     "test": "npm run check && node scripts/measurement-batch-selftest.js && node scripts/measurement-batch-phase-selftest.js && node scripts/measurement-batch-input-selftest.js && node scripts/measurement-batch-loudness-selftest.js && node scripts/measurement-batch-baseline-selftest.js && node scripts/output-phase-reference-selftest.js && node scripts/measurement-batch-ui-selftest.js && node scripts/control-normalize-ways-selftest.js && node scripts/control-headroom-selftest.js && node scripts/control-input-preamp-selftest.js && node scripts/estack-dsp-control-domain-selftest.js && node scripts/control-fader-presentation-selftest.js && node scripts/graphic-eq-fit-selftest.js && node scripts/input-eq-state-selftest.js && node scripts/input-processing-domain-selftest.js && node scripts/input-processing-stage2b-selftest.js && node scripts/output-processing-domain-selftest.js && node scripts/output-graph-analysis-selftest.js && node scripts/navigation-selftest.js && node scripts/system-presets-selftest.js && node scripts/pi-deployment-selftest.js",
     "demo": "bash dev/start-demo.sh",
     "demo:bg": "bash dev/start-demo.sh --background",

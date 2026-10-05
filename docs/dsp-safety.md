@@ -88,6 +88,11 @@ of current Master and −60 dB, upload once, verify the entire readback, then re
 and verify Master. Failure after attenuation holds that safe value and reports
 it; the UI never silently restores volume after an unverified graph write.
 
+CamillaDSP can acknowledge `SetConfigJson` before `GetConfigJson` exposes the
+new graph. Processing edits therefore retry the full revision readback up to
+26 times, 40 ms apart. They restore Master only after the exact requested graph
+appears; a persistent mismatch still holds the attenuated Master.
+
 Output protection requires a unique per-way Limiter and independent active
 Compressor. Only clip_limit and threshold change; threshold is always clip_limit
 minus 1 dB. Ambiguous/shared/missing protection is refused. Attack, release,
