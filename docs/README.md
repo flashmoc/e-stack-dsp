@@ -28,7 +28,7 @@ CamillaNode-compatible APIs and transport; it is not a second DSP backend.
 
 - [Loudness](pages/loudness.md) — live server presets and WiiM bridge state.
 - [Signal Generator](pages/signal-generator.md) — server-owned safe test workflow.
-- [Measurement Batch operator UI](pages/measurement-batch.md) — live sequencing and restore.
+- [Measurement Batch operator UI](pages/measurement-batch.md) — imported calibration vs. **Measure current system (IN3)**, actual DSP diagnostics, safety and restore.
 - [Preferences](pages/preferences.md) — browser-only presentation settings and
   [read-only Connections diagnostics](pages/connections.md).
 
@@ -40,8 +40,8 @@ CamillaNode-compatible APIs and transport; it is not a second DSP backend.
   deployment preparation; physical deployment and hardware acceptance pending.
 - [Standalone Raspberry runtime](standalone-runtime.md) — canonical
   `/home/bastos/e-stack-dsp` service layout, one-time migration and rollback.
-- [Measurement Batch](measurement-batch.md) — batch format and its existing
-  server-owned safety workflow.
+- [Measurement Batch](measurement-batch.md) — mode comparison, IN3 current-system measurements,
+  batch format, gain/mute semantics and server-owned safety workflow.
 - [Product entry and migration status](estack-dsp-product.md) — launch modes
   and product mount path.
 
