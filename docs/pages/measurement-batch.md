@@ -1,28 +1,44 @@
 # Measurement Batch product operator surface
 
-Live mode uses the existing /api/measurement-batch/ status, baseline, import,
-next, previous, retry, goto, abort and clear endpoints through EStackDSPBridge,
-plus `instant` and `effective` for current-system measurements.
-The server still owns baseline capture, scoped deltas, sequencing and exact
-restore. The page never generates a DSP configuration.
+Measurement Batch has **two measurement modes**. Both own their temporary CamillaDSP processing and mixer changes on the server, without replacing hardware `devices`. On each graph swap the server attenuates Master to at most −60 dB, applies and verifies the graph, then restores the prior Master level. On finish or abort it restores the processing and mixer mapping captured when that session started.
 
-The current-system action captures the live DSP at the instant of starting one
-measurement. It routes IN3 at unity mixer gain to the six logical ways, mirrors
-shared L/R input processing onto IN3, and preserves input trim, loudness, EQ, gain,
-crossover, delay, polarity and existing mutes for selected ways; other ways are
-temporarily muted. An imported campaign remains saved for later use. The
-effective-state readback displays actual Master, per-way gain/mute, EQ count,
-input processing and whether the live DSP still matches the captured snapshot.
-Finishing or aborting restores the captured processing and routing.
+## 1. Measure current system (one live snapshot)
 
-The operator sees preview versus active measurement, REW instructions, active
-ways and baseline-relative deltas. Current measurement precedes sequence on
-phone. Sequence buttons remain mounted across polling and operations; current
-content updates only when its state changes. Live status is polled and errors
-remain visible. Abort/restore stays available during a status outage.
+The **MEASURE CURRENT SYSTEM · IN3** panel lets the operator select the ways to measure and click **MEASURE NOW**. This calls `POST /api/measurement-batch/instant` with `{ "activeWays": [...] }`.
 
-The local adapter is loaded only by entry.js outside camillanode mode. Local
-sample import is hidden and unbound in live mode. Local preview is intentionally
-retained for campaign demonstrations. Live import is explicit JSON import.
-Demo E2E covers import, start, next/previous/retry, abort, completion and exact
-configuration/volume restoration, plus Signal Generator exclusion.
+- At the instant of the click, the server captures the **currently running** CamillaDSP processing. Each later click (after finish/abort) captures a **fresh** baseline including changes made in Control between sessions.
+- It sends **physical IN3 (CamillaDSP channel 2)** at **0 dB mixer-source gain** to all six logical ways, OUT1…OUT6. This does **not** set the output way gains to 0 dB.
+- Every selected way keeps its **captured output gain and mute flag**. A selected way already muted stays muted. The unselected ways are temporarily muted.
+- Captured input EQ (including L/R-shared filters mirrored to IN3), output EQ, crossovers, delays, polarity, limiter/protection, Input Trim and Loudness are **preserved**. The mode applies no step overrides.
+- **−60 dB is a gain value, not mute.** To fully exclude a way, uncheck it in the selection panel or mute it in Control **before** MEASURE NOW.
+- With Loudness active, changing WiiM volume during the REW sweep can alter its frequency response. Keep source volume fixed, or turn off dynamic Loudness before taking a static reference.
+
+Press **NEXT / FINISH** to end the single step or **ABORT & RESTORE** to cancel.
+
+## 2. Imported campaign (calibration sequence)
+
+**IMPORT CAMPAIGN** loads a versioned JSON batch; **START BATCH** captures one baseline from the currently running DSP. Every later step is derived **independently from that same baseline** rather than from the preceding step.
+
+- Selected ways are forcibly unmuted and other ways are muted by default (`muteUnlisted`).
+- `gainOffsetDb` is **relative attenuation**: final output Gain = captured output Gain + offset, where offset is constrained to −60…0 dB.
+- The batch may adjust delay, phase, polarity, crossovers or input-filter exclusions within its guarded validation rules. It never removes protections.
+- Loudness and the normal listening Input Trim/preamp are **forced off for calibration**, then restored at the end.
+- Optional `defaults.measurementInput` chooses a **physical IN1…IN8**, feeding logical OUT1…OUT6 at **0 dB mixer-source gain**, with shared pre-mixer L/R filters also applied to the selected input. If absent, the captured mixer routing stays in use.
+- Completion and abort restore the captured mixer mapping and processing.
+
+For batch schema, examples, mode comparison and API details, see [Measurement Batch reference](../../measurement-batch.md).
+
+## Baseline and actual-state diagnostics
+
+- **BASELINE PROCESSING** displays the captured reference, fingerprint and per-way / input-filter inventory. The baseline is a snapshot, not a sequence of incremental states.
+- **ACTUAL DSP DURING THIS MEASUREMENT** uses `GET /api/measurement-batch/effective`. It displays live Master, routing source, way gains/mutes and filter summary; `matchesExpected` identifies drift from the expected temporary graph. An unexpected difference should be resolved before interpreting a sweep.
+- `GET /api/measurement-batch/baseline` returns the live preview before start or the captured baseline during the session; it does not stand in for the actual applied state.
+- The internal Signal Generator must be stopped before starting either mode.
+
+## Implementation and validation boundary
+
+Live mode uses the existing `/api/measurement-batch/` status, baseline, effective, instant, import, start, next, previous, retry, goto, abort and clear endpoints through `EStackDSPBridge`. Server owns all baseline capture, scoped deltas, source routing, sequencing and restoration; the product page never generates a DSP configuration.
+
+Current measurement and live processing are polled without unmounting sequence buttons. The `Abort & Restore` action remains available during an API status outage. The local adapter is loaded only outside CamillaNode mode. Local sample import is hidden/unbound in live mode; local preview is retained for demonstrations.
+
+Repository tests cover imported calibration mode and current-system capture, including IN3 routing, preservation of output gains and selected-way mute, input trim/loudness, fresh per-session snapshot, effective-state reporting, and restoration. These **software simulation checks do not replace physical Raspberry/audio-hardware acceptance**.
