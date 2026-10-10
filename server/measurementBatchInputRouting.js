@@ -18,10 +18,9 @@ const INPUT_PREAMP_STEP = 'E-Stack input preamp';
  * therefore extended temporarily to the selected measurement channel before
  * that channel is routed at unity gain to the E-Stack ways.
  *
- * Measurement mode has two additional invariants: ESTACK_LOUDNESS and the
- * normal-listening ESTACK_INPUT_PREAMP are always OFF. Their captured baseline
- * state is restored exactly on finish/abort, but neither is allowed to bias REW
- * calibration levels or be mirrored from L/R onto a dedicated measurement input.
+ * Calibration campaigns force ESTACK_LOUDNESS and the normal-listening
+ * ESTACK_INPUT_PREAMP off. A current-system snapshot instead keeps both live
+ * filters and mirrors shared L/R processing onto its dedicated input.
  *
  * The batch session already captures the complete live config. This module
  * extends the batch-owned temporary state to include mixer routing while still
@@ -83,8 +82,11 @@ module.exports = function installMeasurementBatchInputRouting(model) {
 
     function inputChannelCount(config, mixer) {
         const mixerInputs = Number(mixer?.channels?.in);
-        if (Number.isInteger(mixerInputs) && mixerInputs > 0) return mixerInputs;
         const captureInputs = Number(config?.devices?.capture?.channels);
+        if (Number.isInteger(mixerInputs) && mixerInputs > 0 && Number.isInteger(captureInputs) && captureInputs > 0) {
+            return Math.min(mixerInputs, captureInputs);
+        }
+        if (Number.isInteger(mixerInputs) && mixerInputs > 0) return mixerInputs;
         if (Number.isInteger(captureInputs) && captureInputs > 0) return captureInputs;
         throw new Error('Cannot determine the number of CamillaDSP capture inputs');
     }
@@ -166,9 +168,6 @@ module.exports = function installMeasurementBatchInputRouting(model) {
         const normalized = original.normalizeBatch(input);
         const raw = input?.defaults?.measurementInput;
         if (raw != null && raw !== '') {
-            if (normalized.defaults.processingMode === 'live-snapshot') {
-                throw new Error('Live snapshot keeps the current mixer routing; do not set measurementInput');
-            }
             normalized.defaults.measurementInput = normalizeMeasurementInput(raw);
         }
         return normalized;
@@ -177,7 +176,10 @@ module.exports = function installMeasurementBatchInputRouting(model) {
     model.applyStep = function applyStepWithMeasurementInput(baselineConfig, batchInput, stepOrIndex) {
         const batch = model.normalizeBatch(batchInput);
         const processed = original.applyStep(baselineConfig, batch, stepOrIndex);
-        if (batch.defaults.processingMode === 'live-snapshot') return processed;
+        if (batch.defaults.processingMode === 'live-snapshot') {
+            if (batch.defaults.measurementInput != null) routeMeasurementInput(processed, batch.defaults.measurementInput);
+            return processed;
+        }
         // Calibration invariants are applied BEFORE measurement-input mirroring.
         // This guarantees the listening preamp cannot be copied onto IN3/IN4.
         const next = loudnessModel.applyPreset(processed, 'reference');

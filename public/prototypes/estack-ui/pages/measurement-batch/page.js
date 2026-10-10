@@ -132,7 +132,7 @@
     $('instantWays').innerHTML = Object.entries(wayLabels).map(([key, name]) => `<label><input type="checkbox" value="${key}" ${instantSelection.has(key) ? 'checked' : ''} ${locked ? 'disabled' : ''}><span>${escape(name)}</span></label>`).join('');
     $('instantHint').textContent = state?.mode === 'live-snapshot' && state.active
       ? 'Snapshot captured. Finish or abort to restore the exact processing state, then start again to capture new adjustments.'
-      : '0 dB is unity gain, not mute. To remove HIGH from the sweep, deselect HIGH or mute it before capture.';
+      : 'IN3 mixer gain is 0 dB; output gains remain as captured. To remove HIGH, deselect HIGH or mute it before capture.';
   }
 
   function renderEffective() {

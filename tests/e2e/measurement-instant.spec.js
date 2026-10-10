@@ -33,7 +33,17 @@ test('current-system measurement captures each live HIGH gain and restores the D
       expect(effective.masterDb).toBe(volume);
       const during = await dsp('GetConfigJson');
       for (const name of gainNames) expect(during.filters[name].parameters.gain).toBe(value);
-      expect(during.mixers).toEqual(captured.mixers);
+      const firstMixer = captured.pipeline.find(step => step.type === 'Mixer').name;
+      expect(during.mixers[firstMixer].channels).toEqual(captured.mixers[firstMixer].channels);
+      for (const mapping of during.mixers[firstMixer].mapping) {
+        if (Number(mapping.dest) <= 5) {
+          expect(mapping.sources).toHaveLength(1);
+          expect(mapping.sources[0]).toMatchObject({ channel: 2, gain: 0, scale: 'dB', inverted: false });
+        } else {
+          expect(mapping).toEqual(captured.mixers[firstMixer].mapping.find(item => Number(item.dest) === Number(mapping.dest)));
+        }
+      }
+      expect(effective.processing.measurementInput).toBe(3);
       expect(during.devices).toEqual(captured.devices);
       expect(during.filters.ESTACK_LOUDNESS).toEqual(captured.filters.ESTACK_LOUDNESS);
       await f.locator('#next').click();

@@ -7,7 +7,8 @@ The server still owns baseline capture, scoped deltas, sequencing and exact
 restore. The page never generates a DSP configuration.
 
 The current-system action captures the live DSP at the instant of starting one
-measurement. It preserves current routing, input trim, loudness, EQ, gain,
+measurement. It routes IN3 at unity mixer gain to the six logical ways, mirrors
+shared L/R input processing onto IN3, and preserves input trim, loudness, EQ, gain,
 crossover, delay, polarity and existing mutes for selected ways; other ways are
 temporarily muted. An imported campaign remains saved for later use. The
 effective-state readback displays actual Master, per-way gain/mute, EQ count,

@@ -327,7 +327,7 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
             version: 1,
             name: 'Current system',
             description: 'Captured from the live DSP when this measurement started.',
-            defaults: { muteUnlisted: true, settleMs: 0, processingMode: 'live-snapshot' },
+            defaults: { muteUnlisted: true, settleMs: 0, processingMode: 'live-snapshot', measurementInput: 3 },
             steps: [{ id: 'LIVE', name: 'Current system', activeWays: body?.activeWays,
                 instruction: 'Measure the current system in REW, then finish and restore.' }]
         });

@@ -26,12 +26,17 @@ const baseline = {
     ]
 };
 const original = JSON.parse(JSON.stringify(baseline));
-const batch = model.normalizeBatch({ version: 1, name: 'Current system', defaults: { processingMode: 'live-snapshot' }, steps: [{ activeWays: ['SUB', 'HIGH_L', 'HIGH_R'] }] });
+const batch = model.normalizeBatch({ version: 1, name: 'Current system', defaults: { processingMode: 'live-snapshot', measurementInput: 3 }, steps: [{ activeWays: ['SUB', 'HIGH_L', 'HIGH_R'] }] });
 const measured = model.applyStep(baseline, batch, 0);
 assert.deepStrictEqual(baseline, original, 'capture mutated the live baseline');
 assert.deepStrictEqual(measured.devices, original.devices, 'hardware settings changed');
-assert.deepStrictEqual(measured.mixers, original.mixers, 'normal mixer routing changed');
-assert.deepStrictEqual(measured.pipeline, original.pipeline, 'filter order or input routing changed');
+assert.deepStrictEqual(measured.mixers.estack.channels, original.mixers.estack.channels, 'hardware mixer size changed');
+for (const mapping of measured.mixers.estack.mapping) {
+    if (mapping.dest <= 5) assert.deepStrictEqual(mapping.sources, [{ channel: 2, gain: 0, scale: 'dB', inverted: false }], `OUT${mapping.dest + 1} is not fed from IN3 at unity`);
+    else assert.deepStrictEqual(mapping, original.mixers.estack.mapping[mapping.dest], 'non-logical output routing changed');
+}
+assert.deepStrictEqual(measured.pipeline[0].channels, [0, 1, 2], 'shared input processing was not mirrored onto IN3');
+assert.deepStrictEqual(measured.pipeline.slice(1), original.pipeline.slice(1), 'output processing order changed');
 for (const name of ['ESTACK_LOUDNESS', 'ESTACK_INPUT_PREAMP', 'GLOBAL_EQ', 'high_peq', 'high_hpf']) {
     assert.deepStrictEqual(measured.filters[name], original.filters[name], `${name} was changed`);
 }
@@ -49,7 +54,13 @@ const revised = JSON.parse(JSON.stringify(baseline));
 revised.filters.high_l_gain.parameters.gain = -36;
 assert.equal(model.applyStep(revised, batch, 0).filters.high_l_gain.parameters.gain, -36, 'new measurement reused stale gain');
 assert.equal(model.applyStep(baseline, batch, 0).filters.high_l_gain.parameters.gain, -24, 'earlier snapshot was mutated');
-assert.throws(() => model.normalizeBatch({ version: 1, name: 'bad', defaults: { processingMode: 'live-snapshot', measurementInput: 4 }, steps: [{ activeWays: ['HIGH_L'] }] }), /routing|measurementInput/i);
+assert.throws(() => model.normalizeBatch({ version: 1, name: 'bad', defaults: { processingMode: 'live-snapshot', measurementInput: 9 }, steps: [{ activeWays: ['HIGH_L'] }] }), /measurementInput/i);
+const tooFewInputs = JSON.parse(JSON.stringify(baseline));
+tooFewInputs.mixers.estack.channels.in = 2;
+tooFewInputs.devices.capture.channels = 2;
+assert.throws(() => model.applyStep(tooFewInputs, batch, 0), /IN3 is unavailable/i);
+tooFewInputs.mixers.estack.channels.in = 8;
+assert.throws(() => model.applyStep(tooFewInputs, batch, 0), /IN3 is unavailable/i, 'physical capture input count was ignored');
 assert.throws(() => model.normalizeBatch({ version: 1, name: 'bad', defaults: { processingMode: 'live-snapshot' }, steps: [{ activeWays: ['HIGH_L'], ways: { HIGH_L: { gainOffsetDb: -2 } } }] }), /no gain/i);
 assert.throws(() => model.normalizeBatch({ version: 1, name: 'bad', defaults: { processingMode: 'live-snapshot', disabledFilters: ['GLOBAL_EQ'] }, steps: [{ activeWays: ['HIGH_L'] }] }), /no gain/i);
 
