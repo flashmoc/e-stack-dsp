@@ -27,6 +27,18 @@ have schema `estack.system-export`, version 1 and an explicit `scope`. They may
 contain local device names or paths; sharing remains an operator action. Export
 never changes DSP, startup state or saved records.
 
+The Saved systems section can also import a JSON file or pasted JSON. It
+accepts this version-1 saved-preset export, a version-1 live export, or a
+minimal object `{ "name": "…", "processing": { "title": "…", "filters": {},
+"pipeline": [], "processors": {} }, "masterVolume": -18 }`. The name can be
+edited before saving. Import requires a unique 3–80 character name, a Master
+between -100 and 0 dB, valid processing references and compatibility with the
+current live mixer/channel topology. Live export `devices` and `mixers` are
+ignored; the saved record contains processing and Master only. A new ID is
+assigned. Import neither applies the preset nor changes startup selection or
+live DSP. It is refused during temporary Signal Generator/Measurement Batch
+workflows. Inspect and explicitly apply the new preset separately.
+
 Software validation uses the canonical Linux demo. Raspberry hardware acceptance
 is pending; this feature does not change hardware YAML or deployment scripts.
 
@@ -49,6 +61,9 @@ configuration and replaces only filters, processors, pipeline and display title.
   temporary-workflow block state.
 - `POST /api/system-presets/capture`: `{name, overwrite?: true}`. Server captures
   live processing and Master. Update preserves ID and creation date; no rename.
+- `POST /api/system-presets/import`: `{name, preset}`. Validates a JSON export
+  or minimal processing snapshot against the current live hardware topology,
+  then saves a new processing-only record without applying it.
 - `POST /api/system-presets/apply`: `{id}` selects an existing server record.
   No uploaded browser processing graph is accepted.
 - `POST /api/system-presets/delete`: `{id}`. Active, specific startup and

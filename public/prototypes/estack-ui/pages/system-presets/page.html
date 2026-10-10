@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="../../shared/tokens.css" />
     <link rel="stylesheet" href="../../shared/base.css" />
     <link rel="stylesheet" href="../../shared/workflow-surface.css?v=workspace-layout1" />
-    <link rel="stylesheet" href="./page.css?v=system-export1" />
+    <link rel="stylesheet" href="./page.css?v=system-import1" />
   </head>
   <body>
     <main class="product-surface">
@@ -46,6 +46,7 @@
                 with this system.
               </p>
             </div>
+            <button id="openImport" type="button">Import JSON</button>
           </header>
           <div id="presets" class="preset-list"></div>
           <p id="empty" class="muted">No system presets saved yet.</p>
@@ -109,8 +110,19 @@
       <textarea id="exportJson" aria-label="Exported system JSON" readonly spellcheck="false" hidden></textarea>
       <p id="exportNotice" role="status"></p>
     </dialog>
-    <script src="../../shared/estack-dsp-bridge.js"></script>
+    <dialog id="importDialog" class="export-dialog" aria-labelledby="importHeading">
+      <header class="surface-actions"><div><h2 id="importHeading">Import system preset</h2><p class="muted">Create a saved preset without changing the current sound or startup choice.</p></div><button id="closeImport" type="button" aria-label="Close import">Close</button></header>
+      <form id="importForm" class="import-form">
+        <label>JSON file<input id="importFile" type="file" accept=".json,application/json" /></label>
+        <label>Or paste JSON<textarea id="importJson" spellcheck="false" placeholder="Paste a saved-preset or live export JSON"></textarea></label>
+        <label>New preset name<input id="importName" minlength="3" maxlength="80" required /></label>
+        <p id="importSummary" class="muted">Processing and Master will be saved. Hardware devices and mixer routing are kept from this system.</p>
+        <button id="saveImport" class="primary" type="submit">Save imported preset</button>
+      </form>
+      <p id="importNotice" role="status" aria-live="polite"></p>
+    </dialog>
+    <script src="../../shared/estack-dsp-bridge.js?v=system-import1"></script>
     <script src="../../shared/product-surface.js"></script>
-    <script src="./page.js?v=system-export2"></script>
+    <script src="./page.js?v=system-import1"></script>
   </body>
 </html>

@@ -26,7 +26,7 @@
       button.disabled =
         unavailable ||
         (model.blocked &&
-          ["capture", "apply", "update"].includes(
+          ["capture", "apply", "update", "openImport"].includes(
             button.dataset.action || button.id,
           )) ||
         (model.blocked && button.id === "exportLive") ||
@@ -265,6 +265,53 @@
     );
   }
   $("exportLive").addEventListener("click", () => openExport("live"));
+  $("openImport").addEventListener("click", () => {
+    $("importForm").reset();
+    $("importSummary").textContent = "Processing and Master will be saved. Hardware devices and mixer routing are kept from this system.";
+    $("importNotice").textContent = "";
+    $("importDialog").showModal();
+  });
+  $("closeImport").addEventListener("click", () => $("importDialog").close());
+  function describeImport() {
+    try {
+      const source = JSON.parse($("importJson").value);
+      const processing = source.scope === "live" ? source.config : source.processing;
+      if (!processing || !Array.isArray(processing.pipeline)) throw new Error("Processing is missing");
+      if (!$("importName").value) $("importName").value = source.name || source.config?.title || "";
+      $("importSummary").textContent = `${processing.pipeline.length} processing steps · Master ${source.masterVolume ?? "missing"} dB. Hardware settings will not be imported.`;
+      $("importNotice").textContent = "";
+    } catch (error) {
+      $("importSummary").textContent = "Choose a valid system JSON file or paste its contents.";
+      $("importNotice").textContent = error.message;
+    }
+  }
+  $("importFile").addEventListener("change", async () => {
+    const file = $("importFile").files[0];
+    if (!file) return;
+    try {
+      $("importJson").value = await file.text();
+      describeImport();
+      if (!$("importName").value) $("importName").value = file.name.replace(/\.json$/i, "").slice(0, 80);
+    } catch (error) { $("importNotice").textContent = error.message; }
+  });
+  $("importJson").addEventListener("input", describeImport);
+  $("importForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    let preset;
+    try { preset = JSON.parse($("importJson").value); }
+    catch { $("importNotice").textContent = "Invalid JSON. Choose a file or paste a system preset."; return; }
+    busy = true;
+    epoch++;
+    $("saveImport").disabled = true;
+    $("importNotice").textContent = "Validating…";
+    try {
+      await post("/api/system-presets/import", { name: $("importName").value, preset });
+      $("importDialog").close();
+      note("System preset imported. Current DSP and startup choice are unchanged.");
+    } catch (error) { $("importNotice").textContent = error.message; }
+    finally { busy = false; $("saveImport").disabled = false; await refresh(); controls(); }
+  });
   $("closeExport").addEventListener("click", () => $("exportDialog").close());
   $("exportDialog").addEventListener("close", () => {
     exportPayload = null;

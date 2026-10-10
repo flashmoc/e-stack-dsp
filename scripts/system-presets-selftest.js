@@ -192,6 +192,49 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
     assert.deepEqual(savedExport.body.processing, record.data.processing);
     assert.equal(savedExport.body.masterVolume, record.data.masterVolume);
     assert.equal(savedExport.body.config, undefined, 'saved export must not claim live hardware state');
+    const importBaseline = { config: clone(config), volume, state: fs.existsSync(stateFile) ? fs.readFileSync(stateFile, 'utf8') : null };
+    commands.length = 0;
+    const importedSaved = await api('/api/system-presets/import', { name: 'Imported saved', preset: savedExport.body });
+    assert(importedSaved.ok, JSON.stringify(importedSaved.body));
+    const importedLive = await api('/api/system-presets/import', { name: 'Imported live', preset: liveExport.body });
+    assert(importedLive.ok, JSON.stringify(importedLive.body));
+    for (const imported of [importedSaved, importedLive]) {
+      assert.notEqual(imported.body.id, id, 'import must issue a new ID');
+      const savedRecord = store.read(saved).find(item => item.id === imported.body.id);
+      assert.deepEqual(savedRecord.data.processing, record.data.processing);
+      assert.equal(savedRecord.data.masterVolume, -18);
+      assert.equal(savedRecord.data.processing.devices, undefined);
+      assert.equal(savedRecord.data.processing.mixers, undefined);
+    }
+    assert.deepEqual(config, importBaseline.config, 'import must not change live DSP');
+    assert.equal(volume, importBaseline.volume);
+    assert.equal(fs.existsSync(stateFile) ? fs.readFileSync(stateFile, 'utf8') : null, importBaseline.state,
+      'import must not change startup or active state');
+    assert(!commands.some(command => typeof command === 'object'), 'import must not issue DSP writes');
+    const importedCount = store.read(saved).length;
+    const invalidImports = [
+      { name: 'Imported saved', preset: savedExport.body },
+      { name: 'Bad schema', preset: { ...savedExport.body, schema: 'unknown' } },
+      { name: 'Bad volume', preset: { ...savedExport.body, masterVolume: 1 } },
+      { name: 'Bad filter', preset: { ...savedExport.body, processing: { ...savedExport.body.processing, filters: { gain: { type: 'Gain' } } } } },
+      { name: 'Missing filter', preset: { ...savedExport.body, processing: { ...savedExport.body.processing, filters: {} } } },
+      { name: 'Hardware edit', preset: { ...savedExport.body, processing: { ...savedExport.body.processing, devices: { playback: { channels: 8 } } } } },
+      { name: 'Wrong topology', preset: { ...savedExport.body, processing: { ...savedExport.body.processing, pipeline: [{ type: 'Mixer', name: 'absent' }] } } },
+    ];
+    for (const payload of invalidImports) {
+      const rejected = await api('/api/system-presets/import', payload);
+      assert.equal(rejected.ok, false, JSON.stringify(payload));
+      assert(rejected.body.reason, 'import validation should explain rejection');
+    }
+    for (const file of [signal, batch]) {
+      store.atomicWrite(file, {});
+      assert.equal((await api('/api/system-presets/import', { name: 'Blocked import', preset: savedExport.body })).ok, false);
+      fs.unlinkSync(file);
+    }
+    assert.equal(store.read(saved).length, importedCount, 'invalid imports must not save records');
+    assert.deepEqual(config, importBaseline.config);
+    assert.equal(volume, importBaseline.volume);
+    assert(!commands.some(command => typeof command === 'object'));
     for (const file of [signal, batch]) {
       store.atomicWrite(file, {});
       assert.equal((await api('/api/system-presets/export?scope=live')).ok, false);
@@ -348,6 +391,16 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
       const captured = await api('/api/system-presets/capture', { name: `Eight channel ${destinations.length}` });
       assert(captured.ok, captured.body.error);
       const eightRecord = store.read(saved).find(item => item.id === captured.body.id);
+      const eightImport = await api('/api/system-presets/import', {
+        name: `Imported eight ${destinations.length}`,
+        preset: { schema: 'estack.system-export', version: 1, scope: 'saved-preset',
+          processing: eightRecord.data.processing, masterVolume: -18 },
+      });
+      assert(eightImport.ok, JSON.stringify(eightImport.body));
+      assert.deepEqual(store.read(saved).find(item => item.id === eightImport.body.id).data.processing,
+        eightRecord.data.processing, 'eight-channel import must retain six-way processing');
+      assert.deepEqual({ devices: config.devices, mixers: config.mixers }, hardware,
+        'eight-channel import must not change hardware');
       eightRecord.data.processing.devices = { playback: { channels: 6, device: 'wrong' } };
       eightRecord.data.processing.mixers = { main: { channels: { in: 6, out: 6 }, mapping: [] } };
       store.update(saved, records => {

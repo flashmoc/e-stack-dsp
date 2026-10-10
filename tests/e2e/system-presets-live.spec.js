@@ -97,6 +97,34 @@ test("system capture/apply/startup preserves hardware and mixed records, locks t
     await page.unroute('**/api/system-presets/export?*');
     expect(await dsp('GetConfigJson')).toEqual(original);
     expect(await dsp('GetVolume')).toBe(-22);
+    await page.locator('#openImport').click();
+    await page.locator('#importFile').setInputFiles({
+      name: 'system.json', mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(savedExport)),
+    });
+    await expect(page.locator('#importName')).toHaveValue('System release E2E');
+    await page.locator('#importName').fill('Imported E2E system');
+    await page.locator('#saveImport').click();
+    await expect(page.locator('#importDialog')).toBeHidden();
+    const importedRow = page.locator('.preset-row').filter({ hasText: 'Imported E2E system' });
+    await expect(importedRow).toBeVisible();
+    expect(await importedRow.getAttribute('data-id')).not.toBe(id);
+    expect(await dsp('GetConfigJson')).toEqual(original);
+    expect(await dsp('GetVolume')).toBe(-22);
+    await page.locator('#openImport').click();
+    await page.locator('#importJson').fill(JSON.stringify(savedExport));
+    await page.locator('#importName').fill('Imported E2E system');
+    await page.locator('#saveImport').click();
+    await expect(page.locator('#importNotice')).toContainText('Name already exists');
+    await page.locator('#closeImport').click();
+    await page.locator('#openImport').click();
+    await page.locator('#importJson').fill(JSON.stringify(liveExport));
+    await page.locator('#importName').fill('Imported live E2E');
+    await page.locator('#saveImport').click();
+    await expect(page.locator('#importDialog')).toBeHidden();
+    await expect(page.locator('.preset-row').filter({ hasText: 'Imported live E2E' })).toBeVisible();
+    expect(await dsp('GetConfigJson')).toEqual(original);
+    expect(await dsp('GetVolume')).toBe(-22);
     await row.locator("[data-action=apply]").click();
     await expect(page.locator("#dirty")).toHaveText("ACTIVE");
     expect(await dsp("GetVolume")).toBe(-18);

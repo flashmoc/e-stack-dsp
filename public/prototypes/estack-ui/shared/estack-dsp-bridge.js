@@ -94,7 +94,7 @@
     const response = await fetch(path, { cache: 'no-store', ...options });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.ok === false) {
-      const error = new Error(data.error || `CamillaNode API request failed (${response.status}).`);
+      const error = new Error(data.error || data.reason || `CamillaNode API request failed (${response.status}).`);
       error.status = response.status;
       throw error;
     }

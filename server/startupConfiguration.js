@@ -38,6 +38,7 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
     options.savedConfigsFile || path.join(root, "savedConfigs.dat");
   const demo = options.demo === true;
   const jsonParser = express.json({ limit: "64kb" });
+  const importParser = express.json({ limit: "512kb" });
   const signalSnapshot =
     options.signalSnapshotPath ||
     process.env.ESTACK_SIGNAL_SNAPSHOT ||
@@ -79,6 +80,46 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
       filters: clone(config?.filters || {}),
       pipeline: clone(config?.pipeline || []),
       processors: clone(config?.processors || {}),
+    };
+  }
+
+  function importedSystem(body) {
+    const source = body?.preset;
+    if (!source || typeof source !== "object" || Array.isArray(source))
+      throw new Error("Choose a JSON system preset to import");
+    if (source.schema != null && source.schema !== "estack.system-export")
+      throw new Error("Unsupported system JSON schema");
+    if (source.schema && (source.version !== 1 || !["live", "saved-preset"].includes(source.scope)))
+      throw new Error("Unsupported system export version or scope");
+    if (!source.schema && (source.scope != null || (source.version != null && source.version !== 1)))
+      throw new Error("Unsupported system JSON version or scope");
+    const name = String(body.name ?? source.name ?? "").trim();
+    if (name.length < 3 || name.length > 80)
+      throw new Error("Use a name of 3–80 characters");
+    const masterVolume = source.masterVolume;
+    if (typeof masterVolume !== "number" || !Number.isFinite(masterVolume) || masterVolume < -100 || masterVolume > 0)
+      throw new Error("Imported Master must be between -100 and 0 dB");
+    const raw = source.scope === "live" ? source.config : source.processing;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+      throw new Error("Imported processing is missing");
+    if (source.scope !== "live" && (raw.devices != null || raw.mixers != null))
+      throw new Error("Put hardware devices and mixers in a live export; preset processing cannot change them");
+    if (!raw.filters || typeof raw.filters !== "object" || Array.isArray(raw.filters) ||
+        !Array.isArray(raw.pipeline) || (raw.processors != null &&
+          (typeof raw.processors !== "object" || Array.isArray(raw.processors))))
+      throw new Error("Imported processing needs filters and pipeline, with optional processors");
+    const processors = raw.processors || {};
+    for (const [kind, entries] of [["filter", raw.filters], ["processor", processors]]) {
+      for (const [entryName, entry] of Object.entries(entries)) {
+        if (!entry || typeof entry !== "object" || typeof entry.type !== "string" || !entry.type ||
+            !entry.parameters || typeof entry.parameters !== "object" || Array.isArray(entry.parameters))
+          throw new Error(`Invalid imported ${kind} '${entryName}'`);
+      }
+    }
+    return {
+      name, masterVolume,
+      processing: { title: String(raw.title || ""), filters: clone(raw.filters),
+        pipeline: clone(raw.pipeline), processors: clone(processors) },
     };
   }
 
@@ -661,6 +702,40 @@ module.exports = function registerStartupConfiguration(app, options = {}) {
           };
           if (existing) records.splice(records.indexOf(existing), 1, record);
           else records.push(record);
+          return record;
+        });
+      });
+      res.json({ id: result.id, name: result.name });
+    } catch (error) {
+      res.status(409).json({ reason: error.message });
+    }
+  });
+
+  app.post("/api/system-presets/import", importParser, async (req, res) => {
+    try {
+      const result = await gate(async () => {
+        assertNormalWorkflow();
+        const imported = importedSystem(req.body);
+        const ws = await openDsp();
+        let live;
+        try { live = await dspRequest(ws, "GetConfigJson"); }
+        finally { ws.close(); }
+        if (live.devices?.capture?.type === "SignalGenerator")
+          throw new Error("Temporary capture cannot be used to validate a preset");
+        validateProcessingSnapshot(imported.processing, live.mixers, live.devices);
+        const candidate = { ...live, ...imported.processing };
+        if (candidate.filters.ESTACK_INPUT_EQ_STATE)
+          require('../public/prototypes/estack-ui/shared/domain/input-eq-state').validate(candidate);
+        return store.update(savedConfigsFile, (records) => {
+          if (records.some(record => record.type === SYSTEM_TYPE && record.name === imported.name))
+            throw new Error("Name already exists; choose another preset name");
+          const record = {
+            id: randomUUID(), type: SYSTEM_TYPE, name: imported.name,
+            createdDate: new Date().toISOString(),
+            data: { version: 1, sourcePage: "system-presets",
+              processing: imported.processing, masterVolume: imported.masterVolume },
+          };
+          records.push(record);
           return record;
         });
       });
