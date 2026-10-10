@@ -11,6 +11,7 @@ workflows through the existing CamillaDSP runtime.
 - **Input Processing** — global L/R PEQ and input delay.
 - **Output Processing** — per-way crossover, PEQ, gain, delay, polarity, phase, dynamics/limiter, magnitude graph, phase graph and XO Align.
 - **Signal Generator** — protected internal sine or full-band white-noise source with per-way routing and automatic restore.
+- **Measurement Batch** — imported REW calibration sequences and a one-click snapshot of the current DSP system, both with automatic restoration.
 - **Advanced** — read-only live CamillaDSP topology inspection.
 - **Preferences / Connections** — E-Stack UI and DSP endpoints.
 
@@ -18,7 +19,12 @@ The internal test generator is injected as the CamillaDSP **capture source**, so
 
 `SignalGenerator → mixer/routing → crossover → PEQ → gain/delay/phase → protection → output`
 
-For REW sweeps, leave the internal generator off and send the REW sweep through the normal E-Stack input.
+For REW sweeps, **stop the internal Signal Generator** and choose the appropriate Measurement Batch mode:
+
+- **Measure current system (MEASURE NOW):** uses physical **IN3** at **0 dB mixer-source gain** and captures the currently running DSP at each start. Keeps the selected ways' Control gains and mute states, EQ, crossover, delays, polarity, protections, Input Trim and Loudness. Unselected ways are muted temporarily. To exclude a way completely, deselect it or mute it before starting; **−60 dB gain is not mute**. Keep WiiM volume fixed if Loudness is enabled.
+- **Imported calibration campaign:** imports a JSON measurement sequence and captures one baseline at **START BATCH**; each step derives from that original baseline. Selected ways are unmuted, unlisted ways muted by default, relative gain offsets may only attenuate, and Input Trim/Loudness are forced off. Optional `measurementInput` routes a chosen physical IN1–IN8 to the six logical outputs at 0 dB mixer-source gain; otherwise captured mixer routing remains.
+
+Both modes temporarily lower Master to at most −60 dB during configuration swaps, leave hardware `devices` unchanged, display actual applied DSP processing, and restore the captured processing/routing on finish or abort. See [Measurement Batch documentation](docs/measurement-batch.md) for configuration, diagnostics and API details.
 
 ## Repository layout
 
