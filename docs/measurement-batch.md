@@ -1,25 +1,63 @@
 # E-Stack Measurement Batch
 
-Measurement Batch is the repeatable measurement-campaign layer for CamillaNode. It is designed for crossover, polarity, delay, variable-phase and level-alignment work with REW while keeping CamillaDSP hardware devices unchanged.
+Measurement Batch provides **two different REW workflows** on the running CamillaDSP configuration:
 
-## Current-system measurement
+- **Imported campaign (calibration mode):** repeatable JSON sequence with optional, guarded changes to individual ways and input filters.
+- **Measure current system (live-snapshot mode):** a single measurement of the processing and output levels present in Control at the moment the operator clicks **MEASURE NOW**; no imported campaign is required.
 
-`POST /api/measurement-batch/instant` with `{ "activeWays": ["SUB", "KICK", "MID_L", "MID_R", "HIGH_L", "HIGH_R"] }` starts a one-step session from the **current** live CamillaDSP processing. It does not replace the saved campaign. The server temporarily routes physical **IN3** (CamillaDSP channel 2) at **0 dB mixer-source gain** to logical destinations OUT1..OUT6, and mirrors shared pre-mixer L/R processing onto IN3. It preserves selected ways' output gain and mute, EQ, crossover, delay, polarity, input trim and loudness. Unselected ways are temporarily muted. A selected way already muted stays muted. A fresh invocation after finish/abort captures a fresh snapshot, so later Control gain changes are included. The original mixer mapping and pipeline are restored on finish/abort.
+Both workflows capture the live DSP configuration at session start, temporarily apply their measurement processing and mixer routing, then restore the captured processing and mixer mapping on completion or abort. Neither edits hardware `devices` settings. During every configuration switch, the server temporarily reduces Master to **no higher than −60 dB**, verifies the applied configuration, then restores the Master level it read before that switch.
 
-`GET /api/measurement-batch/effective` reads the **actual** DSP configuration and Master during a session, reports selected ways and a per-way filter summary, and flags any difference from the expected captured processing. The product UI shows this next to the current measurement. The 0 dB IN3 mixer gain is distinct from a way's output Gain filter. A `-60 dB` way gain is attenuation, not a true mute; to exclude a way completely, deselect it or mute it in Control before capture. A dynamic loudness filter can still change its response as the WiiM volume changes during a measurement. The current-system mode must therefore be used with a stable source level for comparable sweeps.
+## Which mode should I use?
 
-Imported campaigns retain their existing calibration behavior: they can reroute a dedicated measurement input, apply gain offsets, force selected ways unmuted and force loudness/input trim off. Those values derive from the single baseline captured at `START BATCH`, even if Control changes later while the campaign remains active.
+| | Imported campaign | Measure current system |
+| --- | --- | --- |
+| Start | Import JSON, then `START BATCH` | Choose ways, then `MEASURE NOW` |
+| Capture | One baseline for the whole sequence | Fresh live capture **every time** |
+| Measurement routing | Optional `defaults.measurementInput` IN1–IN8; otherwise captured routing | **Physical IN3** (CamillaDSP source channel 2) |
+| Mixer source gain | 0 dB when measurement input is specified | **0 dB to OUT1…OUT6** |
+| Selected ways | Unmuted; baseline output gains plus permitted step offsets | Retain their **captured gain and mute state** |
+| Unselected ways | Muted by default | Muted temporarily |
+| Input/global EQ | Captured baseline, except explicitly disabled input filters | Captured unchanged, with shared L/R processing mirrored to IN3 |
+| Other output processing | Captured crossovers, EQ, delays, polarity and protections, except permitted step overrides | Captured EQ, crossovers, delays, polarity and protections unchanged |
+| Loudness / Input Trim | **Forced OFF** during measurement | **Preserved** from the captured state |
+| Finish / abort | Restore original configuration and mixer routing | Restore original configuration and mixer routing |
+
+**0 dB is the dedicated measurement input's mixer-source gain, not a way's output Gain setting.** For example, HIGH L set to −24 dB in Control remains at −24 dB in “Measure current system.” A way at **−60 dB is still attenuated, not muted**; to exclude it completely, deselect it in the current-system UI or mute it **before starting** that session.
+
+### Imported campaign (calibration mode)
+
+The JSON defines a sequence of steps. `START BATCH` captures the live configuration **once**. Every step is constructed from that same snapshot, never by stacking changes from the preceding step. Steps can specify active ways; relative output-gain attenuation (`gainOffsetDb`); delay, phase, polarity and crossover overrides; and optional input filter exclusions.
+
+Selected ways are explicitly unmuted, while unlisted ways are muted by default (`muteUnlisted: true`). A step's `gainOffsetDb` is **added to the captured way gain**, not an absolute output gain. Allowed values are −60…0 dB, so a campaign cannot boost a way above its baseline gain.
+
+`defaults.measurementInput` is optional: a number 1…8 reroutes that physical input to all six logical mixer destinations at unity source gain. For example, `measurementInput: 3` means physical **IN3**, not a numbered REW channel or a CamillaDSP zero-based index. Without this field, the captured mixer mapping remains in use. The measured input inherits filters shared by both normal L and R before the mixer; independently left-only or right-only stages are not automatically mirrored.
+
+The calibration policy disables Loudness and the normal listening Input Trim/preamp. All untouched input EQ, output EQ, crossover, delay, polarity and protection processing remains in the path.
+
+### Measure current system (live-snapshot mode)
+
+Use the **MEASURE CURRENT SYSTEM · IN3** panel; select the ways to include, then click **MEASURE NOW**. The server starts a one-step session from the configuration actually running **at that click**. It reroutes physical IN3 (CamillaDSP channel 2) at 0 dB mixer-source gain to OUT1…OUT6 and mirrors pre-mixer input filters common to L/R onto IN3.
+
+All selected ways retain their **existing Gain values and mute flags**. Ways not selected are temporarily muted. Captured Input Trim, Loudness, global/input EQ, output PEQs, crossovers, delays, polarity and protection filters remain active. No step overrides are allowed in this mode.
+
+Press **FINISH / NEXT** or **ABORT & RESTORE** to restore the original DSP processing and mixer mapping. After changing a gain in Control, starting a **new** current-system measurement makes a **fresh snapshot** and measures the new setting, rather than reusing the previous baseline.
+
+**Loudness caveat:** preserving Loudness also preserves its dynamic behavior. Changes in WiiM volume during a sweep can alter the frequency response. Keep source volume stable; for comparable static calibration sweeps, disable dynamic Loudness in the listening preset **before** clicking MEASURE NOW.
+
+### Actual applied DSP state
+
+During either session, the interface queries `GET /api/measurement-batch/effective`, reports actual Master and measurement source plus per-way gains, mutes and filters, and compares the current processing with the processing expected for that step. If `matchesExpected` is false, investigate before trusting the sweep. `GET /api/measurement-batch/baseline` instead reports the captured reference rather than this temporary measurement state.
 
 ## Design invariants
 
-1. **The live DSP state at `START BATCH` is the baseline.** Every measurement is rebuilt from that same captured baseline plus a small validated delta. Steps never accumulate changes from the previous step.
+1. **The session captures live DSP processing.** An imported campaign captures once at `START BATCH` and rebuilds every step from that same baseline. `MEASURE NOW` captures a new baseline on every invocation; it is a single-step live snapshot.
 2. **Hardware devices are never replaced by the batch runner.** Capture/playback device ownership stays with the current live CamillaDSP configuration. Mixer routing is normally copied from the captured baseline; when `measurementInput` is configured, only the first E-Stack mixer's OUT1..OUT6 source routing is temporarily replaced so the selected physical input feeds the measurement ways.
 3. **A dedicated measurement input inherits shared Input L/R processing.** Any active pre-routing `Filter` stage that explicitly processes both normal channels 0 and 1 is temporarily extended to the selected measurement channel before the mixer. This keeps shared Global/Input PEQ and other shared L/R filtering in the acoustic measurement path even when REW enters through IN3/IN4. Independent L-only or R-only stages are never guessed or duplicated.
 4. **Physical input numbering is one-based.** `measurementInput: 4` means physical `IN4`, which is CamillaDSP source channel `3` internally. The selected input is validated against the active mixer/capture channel count before any DSP state is changed.
 5. **Master volume is attenuated during graph swaps.** The runner transitions at at most `-60 dB`, applies and verifies the processing graph and mixer routing, then restores the previous master volume.
-6. **Unlisted ways are muted with their existing output Gain filters.** Crossovers, hard limiters and protection processors stay present.
-7. **A batch may attenuate a way but cannot boost it above the captured baseline.** `gainOffsetDb` is limited to `-60..0 dB`.
-8. **`disabledFilters` is input-processing only.** It cannot bypass output Gain, Delay, crossover, limiter or protection stages. A disabled shared Input filter is removed before measurement-input inheritance, so it is not mirrored to IN3/IN4.
+6. **Unlisted ways are muted via output Gain mute flags.** In calibration, selected ways are unmuted; in live-snapshot, selected ways retain their captured mute flags. Crossovers, hard limiters and protections remain present.
+7. **Calibration gain offsets are relative, not absolute.** `gainOffsetDb` is added to the captured output Gain value and is restricted to `-60..0 dB`. Live-snapshot does not allow step gain overrides; output Gain is retained exactly.
+8. **Calibration `disabledFilters` is input-processing only.** It cannot bypass output Gain, Delay, crossover, limiter or protection stages. A disabled shared Input filter is removed before measurement-input inheritance. Live-snapshot forbids `disabledFilters` and preserves input processing.
 9. **Crossover exploration is guarded around the captured baseline.** A requested crossover frequency must remain within `0.4x..2.5x` the corresponding baseline HPF/LPF frequency. Supported families are Linkwitz-Riley and Butterworth, order 2..8; LR orders must be even.
 10. **Variable phase uses the same first-order CamillaDSP `AllpassFO` law as the manual Output Processing PHASE control.** A batch phase value is applied only after that step's crossover overrides, so an `hpf` or `lpf` phase reference follows the actual crossover frequency being measured. The phase filter description stores both requested degrees and reference frequency so Output Processing displays the same reference instead of reinterpreting a band-pass all-pass at another crossover.
 11. **Baseline processing provenance is explicit.** Before START the UI shows a live preview; after START it shows the exact captured `baselineConfig` used by the session. A 12-character SHA-256-derived baseline ID fingerprints filters, pipeline, processors and mixer routing. Input EQ, per-way output EQ and dynamic input filters are listed in `VIEW BASELINE`.
@@ -135,7 +173,7 @@ Before START, `LIVE` is an advisory preview fetched from the current CamillaDSP 
 
 The baseline ID is the first 12 hexadecimal characters of a SHA-256 fingerprint over the captured filters, pipeline, processors and mixer routing. It is not a preset name: two campaigns with the same visible preset name but different DSP processing will receive different IDs.
 
-For system calibration, dynamic Loudness should normally be disabled/reference unless the campaign is specifically intended to characterize that dynamic listening mode. The baseline warning exists to make such accidental processing visible before a long measurement run.
+In an imported calibration campaign, Loudness and Input Trim are forced off irrespective of their captured state; the baseline inspection may still show them as originally present. In live-snapshot mode they remain active exactly as captured, so a WiiM volume change during a sweep can alter the actual Loudness response. For a repeatable static response, disable Loudness before starting a live-snapshot session.
 
 ### Ways
 
@@ -208,6 +246,25 @@ GET /api/measurement-batch/status
 
 Returns batch metadata, complete sequence, progress, current measurement, next measurement and a human-readable `message` suitable for an iPhone Shortcut notification. `batch.defaults.measurementInput` identifies the physical measurement source when configured. During an active session the response also contains `baseline`, summarized from the captured session baseline.
 
+### Measure the current system
+
+```http
+POST /api/measurement-batch/instant
+Content-Type: application/json
+
+{ "activeWays": ["SUB", "KICK", "MID_L", "MID_R", "HIGH_L", "HIGH_R"] }
+```
+
+Starts a one-step live snapshot with physical IN3 at 0 dB mixer-source gain. It does not require or replace an imported campaign. Selected ways retain their existing gain and mute, unselected ways are muted, and Input Trim/Loudness are preserved.
+
+### Effective live processing
+
+```http
+GET /api/measurement-batch/effective
+```
+
+While a session is active, returns actual DSP processing, current Master, selected ways and `matchesExpected`, comparing the applied configuration with the measurement step expected from the captured baseline. During idle it returns `active: false`.
+
 ### Baseline processing
 
 ```http
@@ -235,7 +292,7 @@ POST /api/measurement-batch/next
 
 `next` is intentionally smart:
 
-- no active session → captures the live DSP baseline and prepares measurement 1;
+- no active session → starts the already-imported campaign and captures its baseline (not the current-system shortcut);
 - active session → marks the current step complete and prepares the next;
 - current step is the final one → restores the baseline and returns `phase: "complete"`.
 
@@ -251,7 +308,7 @@ POST /api/measurement-batch/abort
 POST /api/measurement-batch/clear
 ```
 
-`abort` always restores the captured processing and mixer routing before ending the session.
+`abort` always restores the captured processing and mixer routing before ending the session. Finishing the final step via `next` also restores the snapshot. Neither route alters hardware `devices`.
 
 ## iPhone Shortcut
 
