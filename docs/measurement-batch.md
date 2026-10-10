@@ -2,6 +2,14 @@
 
 Measurement Batch is the repeatable measurement-campaign layer for CamillaNode. It is designed for crossover, polarity, delay, variable-phase and level-alignment work with REW while keeping CamillaDSP hardware devices unchanged.
 
+## Current-system measurement
+
+`POST /api/measurement-batch/instant` with `{ "activeWays": ["SUB", "KICK", "MID_L", "MID_R", "HIGH_L", "HIGH_R"] }` starts a one-step session from the **current** live CamillaDSP processing. It does not replace the saved campaign. It preserves normal mixer routing, selected ways' gain and mute, EQ, crossover, delay, polarity, input trim and loudness. Unselected ways are temporarily muted. A selected way already muted stays muted. The server rejects measurement-input and processing overrides in this mode. A fresh invocation after finish/abort captures a fresh snapshot, so later Control gain changes are included.
+
+`GET /api/measurement-batch/effective` reads the **actual** DSP configuration and Master during a session, reports selected ways and a per-way filter summary, and flags any difference from the expected captured processing. The product UI shows this next to the current measurement. A `-60 dB` way gain is attenuation, not a true mute; to exclude a way completely, deselect it or mute it in Control before capture. A dynamic loudness filter can still change its response as the WiiM volume changes during a measurement. The current-system mode must therefore be used with a stable source level for comparable sweeps.
+
+Imported campaigns retain their existing calibration behavior: they can reroute a dedicated measurement input, apply gain offsets, force selected ways unmuted and force loudness/input trim off. Those values derive from the single baseline captured at `START BATCH`, even if Control changes later while the campaign remains active.
+
 ## Design invariants
 
 1. **The live DSP state at `START BATCH` is the baseline.** Every measurement is rebuilt from that same captured baseline plus a small validated delta. Steps never accumulate changes from the previous step.

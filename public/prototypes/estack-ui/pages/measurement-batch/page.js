@@ -11,8 +11,11 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   let state = null;
   let baseline = null;
+  let effective = null;
+  const instantSelection = new Set(Object.keys(wayLabels));
   let busy = false, online = !apiMode;
   let localModel = null;
+  let localSavedCampaign;
 
   const sample = {
     schema: 'estack.measurement-batch', version: 1, name: 'KICK ↔ MID alignment',
@@ -37,6 +40,7 @@
     const completed = model.completed || [];
     return {
       ok: true, phase: active ? 'active' : batch ? 'ready' : 'empty', active,
+      mode: active && batch?.defaults?.processingMode === 'live-snapshot' ? 'live-snapshot' : 'campaign',
       batch: batch ? { schema: batch.schema, version: batch.version || 1, name: batch.name, description: batch.description, total: sequence.length, defaults: clone(batch.defaults || {}) } : null,
       sequence, current, next: active ? sequence[model.currentIndex + 1] || null : null,
       progress: { currentIndex: active ? model.currentIndex : null, currentNumber: active ? model.currentIndex + 1 : null, total: sequence.length, completedCount: completed.length, completed },
@@ -62,6 +66,13 @@
   const localActions = {
     status: async () => localSnapshot(),
     baseline: async () => localBaseline(),
+    effective: async () => ({ ok: true, active: false }),
+    instant: async activeWays => {
+      if (localModel?.active) throw new Error('Finish the active measurement first');
+      localSavedCampaign = localModel?.batch || null;
+      localModel = { batch: { schema: 'estack.measurement-batch', version: 1, name: 'Current system', description: 'Local preview only', defaults: { processingMode: 'live-snapshot' }, steps: [{ id: 'LIVE', name: 'Current system', activeWays, ways: {}, crossovers: {} }] }, active: true, currentIndex: 0, completed: [] };
+      const result = persistLocal('local current-system preview'); result.mode = 'live-snapshot'; return result;
+    },
     import: async batch => { localModel = { batch: clone(batch), active: false, currentIndex: null, completed: [] }; return persistLocal('measurement batch imported locally'); },
     clear: async () => { localModel = { batch: null, active: false, currentIndex: null, completed: [] }; return persistLocal('measurement batch cleared locally'); },
     next: async () => {
@@ -69,17 +80,19 @@
       if (!localModel.active) { localModel.active = true; localModel.currentIndex = 0; localModel.completed = []; return persistLocal('local batch baseline captured'); }
       const last = localModel.batch.steps.length - 1;
       localModel.completed = [...new Set([...(localModel.completed || []), localModel.currentIndex])];
-      if (localModel.currentIndex >= last) { localModel.active = false; localModel.currentIndex = null; const result = persistLocal('local batch restored'); result.phase = 'complete'; result.restored = true; result.message = `COMPLETE · ${localModel.batch.name} · normal processing restored`; return result; }
+      if (localModel.currentIndex >= last) { const name = localModel.batch.name; localModel.active = false; localModel.currentIndex = null; if (localSavedCampaign !== undefined) { localModel.batch = localSavedCampaign; localSavedCampaign = undefined; } const result = persistLocal('local batch restored'); result.phase = 'complete'; result.restored = true; result.message = `COMPLETE · ${name} · normal processing restored`; return result; }
       localModel.currentIndex += 1; return persistLocal('local measurement advanced');
     },
     previous: async () => { if (!localModel?.active) throw new Error('No active campaign'); localModel.currentIndex = Math.max(0, localModel.currentIndex - 1); localModel.completed = (localModel.completed || []).filter(index => index < localModel.currentIndex); return persistLocal('local measurement moved back'); },
     retry: async () => { if (!localModel?.active) throw new Error('No active campaign'); return persistLocal('local measurement reapplied'); },
     goto: async index => { if (!localModel?.active) throw new Error('No active campaign'); if (!Number.isInteger(index) || index < 0 || index >= localModel.batch.steps.length) throw new Error('Invalid measurement index'); localModel.currentIndex = index; localModel.completed = (localModel.completed || []).filter(value => value < index); return persistLocal('local measurement selected'); },
-    abort: async () => { if (!localModel?.active) return localSnapshot(); localModel.active = false; localModel.currentIndex = null; localModel.completed = []; const result = persistLocal('local batch restored'); result.restored = true; result.aborted = true; result.message = `RESTORED · ${localModel.batch.name} · normal processing restored`; return result; }
+    abort: async () => { if (!localModel?.active) return localSnapshot(); const name = localModel.batch.name; localModel.active = false; localModel.currentIndex = null; localModel.completed = []; if (localSavedCampaign !== undefined) { localModel.batch = localSavedCampaign; localSavedCampaign = undefined; } const result = persistLocal('local batch restored'); result.restored = true; result.aborted = true; result.message = `RESTORED · ${name} · normal processing restored`; return result; }
   };
 
   const apiActions = {
     status: () => request('status'), baseline: () => request('baseline'),
+    effective: () => request('effective'),
+    instant: activeWays => request('instant', { method: 'POST', body: JSON.stringify({ activeWays }) }),
     import: batch => request('import', { method: 'POST', body: JSON.stringify({ batch }) }),
     clear: () => request('clear', { method: 'POST', body: '{}' }),
     next: () => request('next', { method: 'POST', body: '{}' }),
@@ -111,6 +124,34 @@
     $('progressLabel').textContent = `${completed} / ${total}`;
     $('progressText').textContent = state?.active ? 'Measure in REW, then continue' : state?.phase === 'complete' ? 'Complete · system restored' : batch ? 'Ready to start' : 'Import a campaign to begin';
     $('progressBar').style.width = `${total ? Math.min(100, completed / total * 100) : 0}%`;
+  }
+
+  function renderInstant() {
+    const locked = busy || !!state?.active;
+    $('startInstant').disabled = locked || instantSelection.size === 0;
+    $('instantWays').innerHTML = Object.entries(wayLabels).map(([key, name]) => `<label><input type="checkbox" value="${key}" ${instantSelection.has(key) ? 'checked' : ''} ${locked ? 'disabled' : ''}><span>${escape(name)}</span></label>`).join('');
+    $('instantHint').textContent = state?.mode === 'live-snapshot' && state.active
+      ? 'Snapshot captured. Finish or abort to restore the exact processing state, then start again to capture new adjustments.'
+      : '0 dB is unity gain, not mute. To remove HIGH from the sweep, deselect HIGH or mute it before capture.';
+  }
+
+  function renderEffective() {
+    $('effectivePanel').hidden = !state?.active || !apiMode;
+    if (!state?.active || !apiMode) return;
+    if (!effective?.active) { $('effectiveSummary').textContent = 'Reading the actual DSP…'; return; }
+    const processing = effective.processing || {};
+    const input = processing.input || {};
+    const selected = new Set(effective.selectedWays || []);
+    const dynamic = input.dynamicFilters || [];
+    const loudness = dynamic.find(filter => filter.name === 'ESTACK_LOUDNESS');
+    const trim = (input.filters || []).find(filter => filter.name === 'ESTACK_INPUT_PREAMP');
+    const wayRows = Object.entries(processing.ways || {}).map(([key, way]) => {
+      const gain = (way.filters || []).find(filter => filter.kind === 'gain');
+      const active = selected.has(key) && gain?.mute !== true;
+      const filterKinds = [...new Set((way.filters || []).filter(filter => filter.kind !== 'gain').map(filter => filter.kind))];
+      return `<div><span>${escape(way.label || label(key))}</span><strong>${active ? 'ON' : 'MUTED'} · ${gain?.gainDb == null ? '—' : `${Number(gain.gainDb).toFixed(1)} dB`} · ${way.eqCount || 0} EQ</strong><small>${escape(filterKinds.join(' · ') || 'No other filters')}</small></div>`;
+    }).join('');
+    $('effectiveSummary').innerHTML = `<p class="${effective.matchesExpected ? 'effective-ok' : 'effective-warning'}">${effective.matchesExpected ? 'Verified against captured state' : 'DSP differs from captured state — check before sweeping'}</p><div class="effective-facts"><span>MASTER</span><strong>${effective.masterDb == null ? '—' : `${Number(effective.masterDb).toFixed(1)} dB`}</strong><span>ROUTING</span><strong>${processing.measurementInputMode === 'dedicated-mono' ? `IN${processing.measurementInput}` : 'Current mixer'}</strong><span>LOUDNESS</span><strong>${processing.measurementPolicy?.loudness === 'forced-off' ? 'Forced off' : loudness ? 'Current live filter' : 'None'}</strong><span>INPUT TRIM</span><strong>${processing.measurementPolicy?.inputTrim === 'forced-off' ? 'Forced off' : trim ? `${trim.gainDb ?? '—'} dB` : 'None'}</strong><span>INPUT EQ</span><strong>${input.eqCount || 0} filters</strong></div><div class="effective-ways">${wayRows}</div><details><summary>Filter names and settings</summary><pre>${escape(JSON.stringify({ input: input.filters, ways: Object.fromEntries(Object.entries(processing.ways || {}).map(([key, way]) => [key, way.filters])) }, null, 2))}</pre></details>`;
   }
 
   let sequenceSignature='',currentSignature='';
@@ -149,8 +190,8 @@
 
   function renderActions() {
     const active = !!state?.active;
-    $('previous').disabled = busy || !active || !(state.progress?.currentIndex > 0);
-    $('retry').disabled = busy || !active;
+    $('previous').disabled = busy || !active || state.mode === 'live-snapshot' || !(state.progress?.currentIndex > 0);
+    $('retry').disabled = busy || !active || state.mode === 'live-snapshot';
     $('next').disabled = busy || !state?.batch;
     $('next').textContent = active ? (state.next ? 'NEXT MEASUREMENT' : 'FINISH & RESTORE') : 'START BATCH';
     $('abort').disabled = busy || !active;
@@ -162,12 +203,12 @@
     $('baselineData').innerHTML = item ? `<span>STATE</span><strong>${item.captured ? 'CAPTURED' : 'LIVE PREVIEW'}</strong><span>FINGERPRINT</span><strong>${escape(item.id || '—')}</strong><span>MEASUREMENT SOURCE</span><strong>${item.measurementInput == null ? 'BASELINE ROUTING' : `IN${item.measurementInput}`}</strong>` : '<span>STATE</span><strong>UNAVAILABLE</strong><span>FINGERPRINT</span><strong>—</strong><span>MEASUREMENT SOURCE</span><strong>—</strong>';
   }
 
-  function render() { renderHeader(); renderSequence(); renderCurrent(); renderActions(); renderBaseline(); }
+  function render() { renderHeader(); renderInstant(); renderSequence(); renderCurrent(); renderEffective(); renderActions(); renderBaseline(); }
 
   let operationEpoch = 0;
   async function refresh({ silent = false } = {}) {
     const epoch = operationEpoch;
-    try { const nextState = await actions.status(); const nextBaseline = await actions.baseline(); if (epoch !== operationEpoch) return; state = nextState; baseline = nextBaseline; online = true; if (!silent) setStatus(state.message || 'Ready', state.active ? 'success' : 'pending'); }
+    try { const nextState = await actions.status(); const nextBaseline = await actions.baseline(); const nextEffective = nextState.active ? await actions.effective() : null; if (epoch !== operationEpoch) return; state = nextState; baseline = nextBaseline; effective = nextEffective; online = true; if (!silent) setStatus(state.message || 'Ready', state.active ? 'success' : 'pending'); }
     catch (error) { online = false; setStatus(error.message, 'critical'); if (!state) state = { phase: 'error', sequence: [], progress: {} }; }
     render();
   }
@@ -176,7 +217,7 @@
     if (busy) return;
     operationEpoch++;
     busy = true; setStatus(note, 'warning'); renderHeader(); renderActions(); renderSequence();
-    try { state = await actions[name](value); baseline = await actions.baseline(); setStatus(state.message || 'Done', state.phase === 'error' ? 'critical' : state.active ? 'success' : 'pending'); }
+    try { state = await actions[name](value); baseline = await actions.baseline(); effective = state.active ? await actions.effective() : null; setStatus(state.message || 'Done', state.phase === 'error' ? 'critical' : state.active ? 'success' : 'pending'); }
     catch (error) { setStatus(error.message, 'critical'); }
     finally { busy = false; render(); }
   }
@@ -188,6 +229,8 @@
   }
 
   $('importBatch').addEventListener('click', () => $('batchFile').click());
+  $('instantWays').addEventListener('change', event => { const input = event.target.closest('input[type="checkbox"]'); if (!input || state?.active) return; if (input.checked) instantSelection.add(input.value); else instantSelection.delete(input.value); renderInstant(); });
+  $('startInstant').addEventListener('click', () => { if (instantSelection.size) run('instant', [...instantSelection], 'Capturing current DSP state…'); });
   $('batchFile').addEventListener('change', event => { const file = event.target.files?.[0]; if (file) importFile(file); });
   if (!apiMode) $('loadSample').addEventListener('click', () => run('import', sample, 'Loading sample campaign…'));
   $('clearBatch').addEventListener('click', () => { if (confirm('Clear the current Measurement Batch?')) run('clear', null, 'Clearing campaign…'); });
