@@ -138,6 +138,12 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
         finally { try { ws.close(); } catch (_) {} }
     }
 
+    async function liveVolume() {
+        const ws = await openDsp();
+        try { return await request(ws, 'GetVolume'); }
+        finally { try { ws.close(); } catch (_) {} }
+    }
+
     async function applyProcessing(targetConfig, settleMs = 0) {
         const ws = await openDsp();
         let oldVolume = null;
@@ -180,8 +186,31 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
         return baselineView.summarizeBaseline(session.baselineConfig, {
             captured: true,
             capturedAt: session.startedAt || null,
-            measurementInput: batch?.defaults?.measurementInput
+            measurementInput: batch?.defaults?.measurementInput,
+            processingMode: batch?.defaults?.processingMode
         });
+    }
+
+    async function effectiveState() {
+        const session = readSession();
+        if (!session?.baselineConfig) return { ok: true, active: false };
+        const batch = normalizedSessionBatch(session);
+        const expected = model.applyStep(session.baselineConfig, batch, session.currentIndex);
+        const config = await liveConfig();
+        return {
+            ok: true,
+            active: true,
+            matchesExpected: model.sameProcessing(config, expected),
+            masterDb: await liveVolume(),
+            capturedMasterDb: session.masterDb ?? null,
+            selectedWays: [...batch.steps[session.currentIndex].activeWays],
+            processing: baselineView.summarizeBaseline(config, {
+                captured: true,
+                capturedAt: session.startedAt,
+                measurementInput: batch.defaults.measurementInput,
+                processingMode: batch.defaults.processingMode
+            })
+        };
     }
 
     async function baselineState() {
@@ -197,7 +226,8 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
             baseline: baselineView.summarizeBaseline(config, {
                 captured: false,
                 capturedAt: null,
-                measurementInput: batch?.defaults?.measurementInput
+                measurementInput: batch?.defaults?.measurementInput,
+                processingMode: batch?.defaults?.processingMode
             })
         };
     }
@@ -240,6 +270,7 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
             baseline: active ? summarizeSessionBaseline(session, batch) : null,
             sequence,
             active,
+            mode: active && batch?.defaults?.processingMode === 'live-snapshot' ? 'live-snapshot' : 'campaign',
             progress: {
                 currentIndex: active ? session.currentIndex : null,
                 currentNumber: active ? session.currentIndex + 1 : null,
@@ -286,6 +317,42 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
         } catch (error) {
             try { await applyProcessing(baselineConfig, 0); } catch (_) {}
             clearSession();
+            throw error;
+        }
+    }
+
+    async function startInstant(body) {
+        if (readSession()) throw new Error('Finish or abort the active measurement before starting a live snapshot');
+        const batch = model.normalizeBatch({
+            version: 1,
+            name: 'Current system',
+            description: 'Captured from the live DSP when this measurement started.',
+            defaults: { muteUnlisted: true, settleMs: 0, processingMode: 'live-snapshot' },
+            steps: [{ id: 'LIVE', name: 'Current system', activeWays: body?.activeWays,
+                instruction: 'Measure the current system in REW, then finish and restore.' }]
+        });
+        const baselineConfig = await liveConfig();
+        preflight(batch, baselineConfig);
+        const session = {
+            version: 1,
+            mode: 'live-snapshot',
+            bootId: bootId(),
+            startedAt: new Date().toISOString(),
+            masterDb: await liveVolume(),
+            batch,
+            baselineConfig,
+            currentIndex: 0,
+            completed: []
+        };
+        writeSession(session);
+        try {
+            await applyProcessing(model.applyStep(baselineConfig, batch, 0), 0);
+            return state({ applied: true });
+        } catch (error) {
+            try { await applyProcessing(baselineConfig, 0); clearSession(); }
+            catch (restoreError) {
+                throw new Error(`${error.message}; automatic restore failed: ${restoreError.message}. The captured session remains for recovery.`);
+            }
             throw error;
         }
     }
@@ -378,6 +445,18 @@ module.exports = function registerMeasurementBatch(app, options = {}) {
     app.get('/api/measurement-batch/baseline', async (_req, res) => {
         try { res.json(await baselineState()); }
         catch (error) { fail(res, error); }
+    });
+
+    app.get('/api/measurement-batch/effective', async (_req, res) => {
+        try { res.json(await effectiveState()); }
+        catch (error) { fail(res, error); }
+    });
+
+    app.post('/api/measurement-batch/instant', async (req, res) => {
+        try {
+            const body = await readBody(req, 64 * 1024);
+            res.json(await queue(() => startInstant(body)));
+        } catch (error) { fail(res, error); }
     });
 
     app.post('/api/measurement-batch/import', async (req, res) => {

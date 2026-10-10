@@ -147,8 +147,9 @@ function summarizeBaseline(config, options = {}) {
     const inputEqFilters = inputFilters.filter(item => item.kind === 'eq');
     const sharedInputEqFilters = sharedInputFilters.filter(item => item.kind === 'eq');
     const dynamicInputFilters = inputFilters.filter(item => item.kind === 'dynamic');
-    const forcedOffDynamicFilters = dynamicInputFilters.filter(item => MEASUREMENT_FORCED_OFF.has(item.name));
-    const activeMeasurementDynamicFilters = dynamicInputFilters.filter(item => !MEASUREMENT_FORCED_OFF.has(item.name));
+    const liveSnapshot = options.processingMode === 'live-snapshot';
+    const forcedOffDynamicFilters = liveSnapshot ? [] : dynamicInputFilters.filter(item => MEASUREMENT_FORCED_OFF.has(item.name));
+    const activeMeasurementDynamicFilters = dynamicInputFilters.filter(item => liveSnapshot || !MEASUREMENT_FORCED_OFF.has(item.name));
     for (const item of forcedOffDynamicFilters) {
         item.kind = 'forced-off';
         item.description = `${item.description ? `${item.description} · ` : ''}Measurement Batch forces this filter OFF for every measurement step and restores its baseline state on finish/abort.`;
@@ -172,7 +173,8 @@ function summarizeBaseline(config, options = {}) {
         measurementInputMode: measurementInput == null ? 'baseline-routing' : 'dedicated-mono',
         sharedInputMirrored: measurementInput != null && measurementInput > 2,
         measurementPolicy: {
-            loudness: 'forced-off',
+            loudness: liveSnapshot ? 'captured-live' : 'forced-off',
+            inputTrim: liveSnapshot ? 'captured-live' : 'forced-off',
             forcedOffFilters: forcedOffDynamicFilters.map(item => item.name)
         },
         counts: {

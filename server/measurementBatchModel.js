@@ -180,8 +180,12 @@ function normalizeBatch(input) {
     const defaults = {
         muteUnlisted: rawDefaults.muteUnlisted !== false,
         settleMs: rawDefaults.settleMs == null ? 500 : Math.round(boundedNumber(rawDefaults.settleMs, 0, 5000, 'defaults.settleMs')),
-        disabledFilters: normalizeDisabledFilters(rawDefaults.disabledFilters, 'defaults.disabledFilters')
+        disabledFilters: normalizeDisabledFilters(rawDefaults.disabledFilters, 'defaults.disabledFilters'),
+        processingMode: rawDefaults.processingMode === 'live-snapshot' ? 'live-snapshot' : 'calibration'
     };
+    if (rawDefaults.processingMode != null && !['calibration', 'live-snapshot'].includes(rawDefaults.processingMode)) {
+        throw new Error('defaults.processingMode must be calibration or live-snapshot');
+    }
 
     const ids = new Set();
     const steps = input.steps.map((raw, index) => {
@@ -221,6 +225,12 @@ function normalizeBatch(input) {
         };
     });
 
+    if (defaults.processingMode === 'live-snapshot') {
+        if (steps.length !== 1 || !defaults.muteUnlisted || defaults.disabledFilters.length ||
+            steps.some(step => Object.keys(step.ways).length || Object.keys(step.crossovers).length || step.disabledFilters.length)) {
+            throw new Error('Live snapshot must contain one measurement with no gain, filter or crossover overrides');
+        }
+    }
     return { schema: 'estack.measurement-batch', version: 1, name, description, defaults, steps };
 }
 
@@ -430,9 +440,10 @@ function applyStep(baselineConfig, batchInput, stepOrIndex) {
         for (const wayKey of Object.keys(WAY_DEFS)) {
             const name = gainFilterName(next, wayKey);
             next.filters[name].parameters = next.filters[name].parameters || {};
-            next.filters[name].parameters.mute = !active.has(wayKey);
+            if (!active.has(wayKey)) next.filters[name].parameters.mute = true;
+            else if (batch.defaults.processingMode !== 'live-snapshot') next.filters[name].parameters.mute = false;
         }
-    } else {
+    } else if (batch.defaults.processingMode !== 'live-snapshot') {
         for (const wayKey of active) {
             const name = gainFilterName(next, wayKey);
             next.filters[name].parameters = next.filters[name].parameters || {};
