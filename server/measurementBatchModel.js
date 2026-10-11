@@ -105,6 +105,11 @@ function normalizePeq(value, label) {
     return value.map((raw, index) => {
         const name = `${label}.peq[${index}]`;
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${name} must be an object`);
+        for (const key of ['slot', 'freqHz', 'q', 'gainDb']) {
+            if (typeof raw[key] !== 'number' || !Number.isFinite(raw[key])) {
+                throw new Error(`${name}.${key} must be a finite number`);
+            }
+        }
         const slot = boundedNumber(raw.slot, 1, MAX_PEQ_SLOTS, `${name}.slot`);
         if (!Number.isInteger(slot) || slots.has(slot)) throw new Error(`${name}.slot must be a unique integer`);
         slots.add(slot);
@@ -491,8 +496,8 @@ function applyOutputPeq(config, wayKey, peqs) {
     const mixerIndex = firstMixerIndex(config);
     const stages = (config.pipeline || []).slice(mixerIndex + 1)
         .filter(step => step?.type === 'Filter' && Array.isArray(step.names) && step.names.includes(gainName));
-    if (stages.length !== 1 || stepChannels(stages[0]).length !== 1 || stepChannels(stages[0])[0] !== channel) {
-        throw new Error(`${WAY_DEFS[wayKey].label} output PEQ requires one independent Gain stage`);
+    if (stages.length !== 1 || stepChannels(stages[0]).length !== 1 || stepChannels(stages[0])[0] !== channel || stages[0].bypassed === true) {
+        throw new Error(`${WAY_DEFS[wayKey].label} output PEQ requires one active independent Gain stage`);
     }
     const stage = stages[0];
     const nyquist = Number(config?.devices?.samplerate || 48000) / 2;
@@ -507,6 +512,9 @@ function applyOutputPeq(config, wayKey, peqs) {
         const existing = config.filters[name];
         if (existing && (!stage.names.includes(name) || existing.type !== 'Biquad' || existing.parameters?.type !== 'Peaking')) {
             throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} is not an independent peaking filter`);
+        }
+        if (existing && (typeof existing.parameters.gain !== 'number' || !Number.isFinite(existing.parameters.gain))) {
+            throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} has an invalid captured gain`);
         }
         if (existing && spec.gainDb > Number(existing.parameters.gain) + 3) {
             throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} cannot raise its captured baseline by more than 3 dB`);
@@ -657,4 +665,3 @@ module.exports = {
     allpassFrequencyForPhase,
     clone
 };
-

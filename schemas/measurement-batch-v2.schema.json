@@ -76,6 +76,9 @@
           "maximum": 8,
           "description": "One-based physical capture input (IN1..IN8). Omit to preserve baseline mixer routing."
         },
+        "processingMode": {
+          "enum": ["calibration", "live-snapshot"]
+        },
         "disabledFilters": {
           "$ref": "#/$defs/disabledFilters"
         }
