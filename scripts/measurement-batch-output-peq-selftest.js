@@ -52,4 +52,7 @@ assert.throws(() => model.normalizeBatch({ ...batch, steps: [{ id: 'X', activeWa
 assert.throws(() => model.applyStep(baseline, { ...batch, steps: [{ id: 'X', activeWays: ['MID_L'], ways: {
     MID_L: { peq: [{ slot: 1, freqHz: 1250, q: 1.6, gainDb: -5 }] }
 } }] }, 0), /captured baseline/);
+const shared = model.clone(baseline);
+shared.pipeline.push({ type: 'Filter', channels: [3], names: ['USER_CH2_PEQ_01'] });
+assert.throws(() => model.applyStep(shared, batch, 0), /shared with another stage/);
 console.log('Measurement Batch output PEQ self-test passed');
