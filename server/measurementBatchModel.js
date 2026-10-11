@@ -275,7 +275,40 @@ function gainFilterName(config, wayKey) {
 }
 
 function delayFilterName(config, wayKey) {
-    return uniqueWayFilter(config, wayKey, filter => filter?.type === 'Delay', 'Delay');
+    const channel = WAY_DEFS[wayKey].channel;
+    const matches = matchingWayFilters(config, wayKey, filter => filter?.type === 'Delay');
+    // A protection stage can reuse a Delay filter definition on several
+    // outputs. Changing that definition would change every output using it.
+    // Inspect every reference, including pre-mixer stages, before selecting a
+    // candidate. Filter names and current delay values are not proof of ownership.
+    const gainName = gainFilterName(config, wayKey);
+    const pipeline = config?.pipeline || [];
+    const mixerIndex = firstMixerIndex(config);
+    const independent = matches.filter(name => pipeline.every((stage, index) => {
+        if (stage?.type !== 'Filter' || !Array.isArray(stage.names) || !stage.names.includes(name)) return true;
+        const channels = stepChannels(stage);
+        return index > mixerIndex && channels.length === 1 && channels[0] === channel;
+    }));
+    const wayStageDelays = [];
+    for (let index = mixerIndex + 1; index < pipeline.length; index += 1) {
+        const stage = pipeline[index];
+        if (stage?.type !== 'Filter' || !Array.isArray(stage.names)) continue;
+        const channels = stepChannels(stage);
+        if (channels.length !== 1 || channels[0] !== channel) continue;
+        if (!stage.names.includes(gainName)) continue;
+        for (const name of stage.names) {
+            if (independent.includes(name) && !wayStageDelays.includes(name)) wayStageDelays.push(name);
+        }
+    }
+    if (wayStageDelays.length > 1) {
+        throw new Error(`${WAY_DEFS[wayKey].label} has ${wayStageDelays.length} independent Delay filters in its Gain stage; delay target is ambiguous`);
+    }
+    if (wayStageDelays.length === 1) return wayStageDelays[0];
+    if (independent.length === 1) return independent[0];
+    if (!independent.length && matches.length) {
+        throw new Error(`${WAY_DEFS[wayKey].label} has no independent Delay filter; ${matches.join(', ')} is shared with another output or input`);
+    }
+    throw new Error(`${WAY_DEFS[wayKey].label} requires exactly one independent way Delay filter after routing; found ${independent.length}`);
 }
 
 function crossoverMatches(config, wayKey, side) {
