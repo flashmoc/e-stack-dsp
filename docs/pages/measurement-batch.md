@@ -42,3 +42,6 @@ Live mode uses the existing `/api/measurement-batch/` status, baseline, effectiv
 Current measurement and live processing are polled without unmounting sequence buttons. The `Abort & Restore` action remains available during an API status outage. The local adapter is loaded only outside CamillaNode mode. Local sample import is hidden/unbound in live mode; local preview is retained for demonstrations.
 
 Repository tests cover imported calibration mode and current-system capture, including IN3 routing, preservation of output gains and selected-way mute, input trim/loudness, fresh per-session snapshot, effective-state reporting, and restoration. These **software simulation checks do not replace physical Raspberry/audio-hardware acceptance**.
+
+
+Imported version 2 campaigns can also test temporary, cut-only output PEQ slot values in each step. The server applies them to the captured baseline and restores the baseline after finish/abort. See [Measurement Batch](../measurement-batch.md#output-peq-candidate-sweeps-version-2) for the schema and safeguards. Version 1 campaigns remain supported.

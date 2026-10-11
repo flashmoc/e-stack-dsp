@@ -339,3 +339,37 @@ Measurement Batch runner (Raspberry)
 ```
 
 The Windows agent should keep REW bound to localhost, expose only the narrow E-Stack operations needed by the Raspberry, verify REW readiness, start the sweep, wait for completion, name the measurement and save the `.mdat`. The existing batch format should not need to change when this layer is added.
+
+
+## Output PEQ candidate sweeps (version 2)
+
+Version 2 batches can replace an output PEQ slot for an individual measurement step or create a new slot on an independent way. Example:
+
+```json
+{
+  "schema": "estack.measurement-batch",
+  "version": 2,
+  "name": "MID response candidates",
+  "defaults": { "measurementInput": 3, "muteUnlisted": true },
+  "steps": [
+    {
+      "id": "P01", "name": "Current MID",
+      "activeWays": ["MID_L", "MID_R"],
+      "rew": { "measurementName": "P01_CURRENT", "startHz": 20, "endHz": 20000, "levelDbfs": -20, "timingReference": true }
+    },
+    {
+      "id": "P02", "name": "Less MID cut",
+      "activeWays": ["MID_L", "MID_R"],
+      "ways": {
+        "MID_L": { "peq": [{ "slot": 1, "freqHz": 1250, "q": 1.6, "gainDb": -7 }] },
+        "MID_R": { "peq": [{ "slot": 1, "freqHz": 1250, "q": 1.6, "gainDb": -7 }] }
+      },
+      "rew": { "measurementName": "P02_LESS_CUT", "startHz": 20, "endHz": 20000, "levelDbfs": -20, "timingReference": true }
+    }
+  ]
+}
+```
+
+`ways.<way>.peq` is a list of absolute output PEQ slot values; it is not an offset. Each entry requires numeric `slot` (1…10), `freqHz` (20…20000 and below Nyquist), `q` (0.3…12) and `gainDb` (−18…0). Slot names are `USER_CH{channel}_PEQ_{slot}`. An existing slot must be an independent post-mixer `Biquad/Peaking` filter in that way's active Gain stage. A missing slot is added before the way Gain. A shared slot, bypassed stage or conflicting filter type is rejected. To neutralize an existing slot for a step, set its `gainDb` to 0; the captured slot is restored in the next step and at finish/abort. Changing an existing cut may raise its gain parameter by at most 3 dB relative to the captured baseline; changing its frequency or Q can alter the response elsewhere, so compare candidates at a conservative sweep level. New filters may only cut. Every candidate starts from the single captured baseline; output limiters, protections, mixer and hardware devices remain unchanged.
+
+PEQ overrides require `version: 2`. Older servers reject version 2 before starting; this prevents a candidate being measured without its requested PEQ. Version 1 batches remain valid. Imported campaigns still force Input Trim and Loudness off, and REW sweep fields remain operator instructions. After the batch, apply a chosen EQ permanently in Output Processing only after reviewing the measured traces.

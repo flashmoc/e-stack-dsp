@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://estack.local/schemas/measurement-batch-v2.schema.json",
+  "title": "E-Stack Measurement Batch",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "estack.measurement-batch"
+    },
+    "version": {
+      "const": 2
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1200
+    },
+    "defaults": {
+      "$ref": "#/$defs/defaults"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "$defs": {
+    "way": {
+      "type": "string",
+      "enum": [
+        "SUB",
+        "KICK",
+        "MID_L",
+        "MID_R",
+        "HIGH_L",
+        "HIGH_R"
+      ]
+    },
+    "disabledFilters": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "muteUnlisted": {
+          "type": "boolean"
+        },
+        "settleMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "measurementInput": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "One-based physical capture input (IN1..IN8). Omit to preserve baseline mixer routing."
+        },
+        "processingMode": {
+          "enum": ["calibration", "live-snapshot"]
+        },
+        "disabledFilters": {
+          "$ref": "#/$defs/disabledFilters"
+        }
+      }
+    },
+    "phase": {
+      "oneOf": [
+        {
+          "type": "number",
+          "minimum": -179,
+          "maximum": 0
+        },
+        {
+          "type": "object",
+          "required": [
+            "degrees"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "degrees": {
+              "type": "number",
+              "minimum": -179,
+              "maximum": 0
+            },
+            "reference": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "hpf",
+                "lpf"
+              ]
+            },
+            "referenceHz": {
+              "type": "number",
+              "minimum": 5,
+              "maximum": 24000
+            }
+          },
+          "not": {
+            "required": [
+              "reference",
+              "referenceHz"
+            ]
+          }
+        }
+      ]
+    },
+    "wayOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "delayMs": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "delayOffsetMs": {
+          "type": "number",
+          "minimum": -50,
+          "maximum": 50
+        },
+        "polarity": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "inverted"
+          ]
+        },
+        "gainOffsetDb": {
+          "type": "number",
+          "minimum": -60,
+          "maximum": 0
+        },
+        "phase": {
+          "$ref": "#/$defs/phase"
+        },
+        "peq": {
+          "$ref": "#/$defs/peq"
+        }
+      },
+      "not": {
+        "required": [
+          "delayMs",
+          "delayOffsetMs"
+        ]
+      }
+    },
+    "crossoverSide": {
+      "oneOf": [
+        {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 24000
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "freqHz": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 24000
+            },
+            "freq": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 24000
+            },
+            "family": {
+              "type": "string",
+              "enum": [
+                "LinkwitzRiley",
+                "Butterworth"
+              ]
+            },
+            "order": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 8
+            }
+          }
+        }
+      ]
+    },
+    "crossoverOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hpf": {
+          "$ref": "#/$defs/crossoverSide"
+        },
+        "lpf": {
+          "$ref": "#/$defs/crossoverSide"
+        },
+        "hpfHz": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 24000
+        },
+        "lpfHz": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 24000
+        }
+      },
+      "minProperties": 1
+    },
+    "rew": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "measurementName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "startHz": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 24000
+        },
+        "endHz": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 24000
+        },
+        "levelDbfs": {
+          "type": "number",
+          "minimum": -80,
+          "maximum": 0
+        },
+        "timingReference": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 800
+        }
+      },
+      "dependentRequired": {
+        "startHz": [
+          "endHz"
+        ],
+        "endHz": [
+          "startHz"
+        ]
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "activeWays"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "instruction": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "position": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "activeWays": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/way"
+          }
+        },
+        "ways": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "SUB": {
+              "$ref": "#/$defs/wayOverride"
+            },
+            "KICK": {
+              "$ref": "#/$defs/wayOverride"
+            },
+            "MID_L": {
+              "$ref": "#/$defs/wayOverride"
+            },
+            "MID_R": {
+              "$ref": "#/$defs/wayOverride"
+            },
+            "HIGH_L": {
+              "$ref": "#/$defs/wayOverride"
+            },
+            "HIGH_R": {
+              "$ref": "#/$defs/wayOverride"
+            }
+          }
+        },
+        "crossovers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "SUB": {
+              "$ref": "#/$defs/crossoverOverride"
+            },
+            "KICK": {
+              "$ref": "#/$defs/crossoverOverride"
+            },
+            "MID_L": {
+              "$ref": "#/$defs/crossoverOverride"
+            },
+            "MID_R": {
+              "$ref": "#/$defs/crossoverOverride"
+            },
+            "HIGH_L": {
+              "$ref": "#/$defs/crossoverOverride"
+            },
+            "HIGH_R": {
+              "$ref": "#/$defs/crossoverOverride"
+            }
+          }
+        },
+        "disabledFilters": {
+          "$ref": "#/$defs/disabledFilters"
+        },
+        "rew": {
+          "$ref": "#/$defs/rew"
+        }
+      }
+    },
+    "peq": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": [
+          "slot",
+          "freqHz",
+          "q",
+          "gainDb"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "slot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "freqHz": {
+            "type": "number",
+            "minimum": 20,
+            "maximum": 20000
+          },
+          "q": {
+            "type": "number",
+            "minimum": 0.3,
+            "maximum": 12
+          },
+          "gainDb": {
+            "type": "number",
+            "minimum": -18,
+            "maximum": 0
+          }
+        }
+      }
+    }
+  }
+}
