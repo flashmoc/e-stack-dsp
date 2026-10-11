@@ -44,6 +44,6 @@ assert.throws(() => applyStep(baseline, sharedSub, 0), /shared with another outp
 const ambiguous = JSON.parse(JSON.stringify(baseline));
 ambiguous.filters.mid_l_extra = delay(0);
 ambiguous.pipeline[3].names.push('mid_l_extra');
-assert.throws(() => applyStep(ambiguous, batch, 0), /exactly one independent way Delay/);
+assert.throws(() => applyStep(ambiguous, batch, 0), /delay target is ambiguous/);
 
 console.log('OK:   Measurement Batch selects per-way delays without editing shared protection delays');
