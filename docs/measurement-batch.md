@@ -2,7 +2,7 @@
 
 Measurement Batch provides **two different REW workflows** on the running CamillaDSP configuration:
 
-- **Imported campaign (calibration mode):** repeatable JSON sequence with optional, guarded changes to individual ways and input filters.
+- **Imported campaign (calibration mode):** repeatable JSON sequence with optional, guarded changes to individual ways and input EQ.
 - **Measure current system (live-snapshot mode):** a single measurement of the processing and output levels present in Control at the moment the operator clicks **MEASURE NOW**; no imported campaign is required.
 
 Both workflows capture the live DSP configuration at session start, temporarily apply their measurement processing and mixer routing, then restore the captured processing and mixer mapping on completion or abort. Neither edits hardware `devices` settings. During every configuration switch, the server temporarily reduces Master to **no higher than −60 dB**, verifies the applied configuration, then restores the Master level it read before that switch.
@@ -17,7 +17,7 @@ Both workflows capture the live DSP configuration at session start, temporarily 
 | Mixer source gain | 0 dB when measurement input is specified | **0 dB to OUT1…OUT6** |
 | Selected ways | Unmuted; baseline output gains plus permitted step offsets | Retain their **captured gain and mute state** |
 | Unselected ways | Muted by default | Muted temporarily |
-| Input/global EQ | Captured baseline, except explicitly disabled input filters | Captured unchanged, with shared L/R processing mirrored to IN3 |
+| Input/global EQ | Captured baseline, except v3 input GEQ/PEQ candidates or explicitly disabled input filters | Captured unchanged, with shared L/R processing mirrored to IN3 |
 | Other output processing | Captured crossovers, EQ, delays, polarity and protections, except permitted step overrides | Captured EQ, crossovers, delays, polarity and protections unchanged |
 | Loudness / Input Trim | **Forced OFF** during measurement | **Preserved** from the captured state |
 | Finish / abort | Restore original configuration and mixer routing | Restore original configuration and mixer routing |
@@ -26,7 +26,7 @@ Both workflows capture the live DSP configuration at session start, temporarily 
 
 ### Imported campaign (calibration mode)
 
-The JSON defines a sequence of steps. `START BATCH` captures the live configuration **once**. Every step is constructed from that same snapshot, never by stacking changes from the preceding step. Steps can specify active ways; relative output-gain attenuation (`gainOffsetDb`); delay, phase, polarity and crossover overrides; and optional input filter exclusions.
+The JSON defines a sequence of steps. `START BATCH` captures the live configuration **once**. Every step is constructed from that same snapshot, never by stacking changes from the preceding step. Steps can specify active ways; relative output-gain attenuation (`gainOffsetDb`); delay, phase, polarity and crossover overrides; and optional input filter exclusions. Version 3 adds input GEQ/PEQ candidates and guarded absolute way gain and output PEQ candidates.
 
 Selected ways are explicitly unmuted, while unlisted ways are muted by default (`muteUnlisted: true`). A step's `gainOffsetDb` is **added to the captured way gain**, not an absolute output gain. Allowed values are −60…0 dB, so a campaign cannot boost a way above its baseline gain.
 
@@ -56,7 +56,7 @@ During either session, the interface queries `GET /api/measurement-batch/effecti
 4. **Physical input numbering is one-based.** `measurementInput: 4` means physical `IN4`, which is CamillaDSP source channel `3` internally. The selected input is validated against the active mixer/capture channel count before any DSP state is changed.
 5. **Master volume is attenuated during graph swaps.** The runner transitions at at most `-60 dB`, applies and verifies the processing graph and mixer routing, then restores the previous master volume.
 6. **Unlisted ways are muted via output Gain mute flags.** In calibration, selected ways are unmuted; in live-snapshot, selected ways retain their captured mute flags. Crossovers, hard limiters and protections remain present.
-7. **Calibration gain offsets are relative, not absolute.** `gainOffsetDb` is added to the captured output Gain value and is restricted to `-60..0 dB`. Live-snapshot does not allow step gain overrides; output Gain is retained exactly.
+7. **Calibration gain offsets are relative.** `gainOffsetDb` is added to the captured output Gain value and is restricted to `-60..0 dB`. Version 3 also accepts `gainDb` as an absolute way Gain, bounded to `-60..+6 dB` and no more than `+3 dB` above the captured way gain; it cannot be combined with `gainOffsetDb`. Live-snapshot does not allow step gain overrides.
 8. **Calibration `disabledFilters` is input-processing only.** It cannot bypass output Gain, Delay, crossover, limiter or protection stages. A disabled shared Input filter is removed before measurement-input inheritance. Live-snapshot forbids `disabledFilters` and preserves input processing.
 9. **Crossover exploration is guarded around the captured baseline.** A requested crossover frequency must remain within `0.4x..2.5x` the corresponding baseline HPF/LPF frequency. Supported families are Linkwitz-Riley and Butterworth, order 2..8; LR orders must be even.
 10. **Variable phase uses the same first-order CamillaDSP `AllpassFO` law as the manual Output Processing PHASE control.** A batch phase value is applied only after that step's crossover overrides, so an `hpf` or `lpf` phase reference follows the actual crossover frequency being measured. The phase filter description stores both requested degrees and reference frequency so Output Processing displays the same reference instead of reinterpreting a band-pass all-pass at another crossover.
@@ -372,4 +372,40 @@ Version 2 batches can replace an output PEQ slot for an individual measurement s
 
 `ways.<way>.peq` is a list of absolute output PEQ slot values; it is not an offset. Each entry requires numeric `slot` (1…10), `freqHz` (20…20000 and below Nyquist), `q` (0.3…12) and `gainDb` (−18…0). Slot names are `USER_CH{channel}_PEQ_{slot}`. An existing slot must be an independent post-mixer `Biquad/Peaking` filter in that way's active Gain stage. A missing slot is added before the way Gain. A shared slot, bypassed stage or conflicting filter type is rejected. To neutralize an existing slot for a step, set its `gainDb` to 0; the captured slot is restored in the next step and at finish/abort. Changing an existing cut may raise its gain parameter by at most 3 dB relative to the captured baseline; changing its frequency or Q can alter the response elsewhere, so compare candidates at a conservative sweep level. New filters may only cut. Every candidate starts from the single captured baseline; output limiters, protections, mixer and hardware devices remain unchanged.
 
-PEQ overrides require `version: 2`. Older servers reject version 2 before starting; this prevents a candidate being measured without its requested PEQ. Version 1 batches remain valid. Imported campaigns still force Input Trim and Loudness off, and REW sweep fields remain operator instructions. After the batch, apply a chosen EQ permanently in Output Processing only after reviewing the measured traces.
+PEQ overrides require `version: 2` or later. Older servers reject unknown versions before starting; this prevents a candidate being measured without its requested PEQ. Version 1 batches remain valid. Imported campaigns still force Input Trim and Loudness off, and REW sweep fields remain operator instructions. After the batch, apply a chosen EQ permanently in Output Processing only after reviewing the measured traces.
+
+## Input EQ and full way candidates (version 3)
+
+Version 3 adds temporary `inputEq` candidates to each step. `geq.targets` is the complete set of ten graphic EQ slider targets (31 Hz through 16 kHz, −12…+12 dB); the server uses the same fitted IIR calculation and semantic ON/OFF state as Input Processing. `peq.bands` addresses the ten global parametric slots. Each band needs `slot`, `freqHz`, `q`, and `gainDb`; `type` may be `Peaking`, `Lowshelf`, or `Highshelf`, and `enabled` defaults to true. `geq.enabled` and `peq.enabled` can toggle their respective entire sections. Omitted settings keep the captured baseline.
+
+```json
+{
+  "schema": "estack.measurement-batch",
+  "version": 3,
+  "name": "EQ and MID level candidates",
+  "defaults": { "measurementInput": 3, "muteUnlisted": true },
+  "steps": [
+    {
+      "id": "A", "activeWays": ["MID_L", "MID_R"],
+      "inputEq": {
+        "geq": { "enabled": true, "targets": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+        "peq": { "enabled": true, "bands": [
+          { "slot": 3, "type": "Peaking", "freqHz": 162, "q": 0.7, "gainDb": -5, "enabled": true }
+        ] }
+      },
+      "ways": {
+        "MID_L": { "gainDb": -12, "peq": [
+          { "slot": 1, "type": "Peaking", "freqHz": 1350, "q": 1, "gainDb": -5, "enabled": true }
+        ] },
+        "MID_R": { "gainOffsetDb": -2 }
+      }
+    }
+  ]
+}
+```
+
+`ways.<way>.gainDb` is an absolute output gain of −60…+6 dB. It may raise the captured gain by at most 3 dB. `gainOffsetDb` retains its version 1/2 meaning: attenuation relative to the captured gain; the two gain forms cannot appear together. Output PEQ in version 3 also accepts shelves, an `enabled` switch, and gains of −12…+12 dB, but a new slot may boost by no more than 3 dB and an existing slot may raise its captured gain parameter by no more than 3 dB. Existing PEQ filters must belong to one independent way stage. A disabled slot remains defined but is removed from the temporary processing path.
+
+For input EQ, the server checks the exact pre-mixer L/R ownership and rejects inconsistent semantic metadata. It evaluates the resulting graphic and parametric response against the captured input EQ and rejects more than +3 dB of additional input EQ response anywhere from 20 Hz to 20 kHz. `disabledFilters` cannot target input EQ names in the same step; use `enabled` instead. These limits are conservative software guards, not proof of safe acoustic output. The existing protection processors, hard limiters, hardware `devices`, and physical output count are not changed. The chosen measurement input inherits the shared L/R input EQ temporarily, and every step and final restore still start from the captured graph.
+
+Master, Input Trim, and Loudness are not step-adjustable. Calibration mode continues to force Input Trim and Loudness off; live-snapshot mode keeps them at the captured values and allows no candidates. The user must review a chosen candidate and apply it through the normal tuning page if they want it to persist.

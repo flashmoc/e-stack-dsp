@@ -164,10 +164,14 @@
       if (value.delayMs != null) parts.push(`delay ${Number(value.delayMs).toFixed(2)} ms`);
       if (value.delayOffsetMs != null) parts.push(`delay Δ ${Number(value.delayOffsetMs).toFixed(2)} ms`);
       if (value.gainOffsetDb != null) parts.push(`gain Δ ${Number(value.gainOffsetDb).toFixed(1)} dB`);
+      if (value.gainDb != null) parts.push(`gain ${Number(value.gainDb).toFixed(1)} dB`);
       if (value.polarity) parts.push(value.polarity);
       if (value.phase != null) { const phase = typeof value.phase === 'object' ? value.phase.degrees : value.phase; parts.push(`phase ${phase}°`); }
+      if (value.peq?.length) parts.push(`${value.peq.length} output PEQ band${value.peq.length === 1 ? '' : 's'}`);
       values.push(`<div><span>${escape(label(way))}</span><strong>${escape(parts.join(' · ') || 'baseline')}</strong></div>`);
     });
+    if (step?.inputEq?.geq) values.push(`<div><span>INPUT GEQ</span><strong>${escape(step.inputEq.geq.targets ? '10 target gains' : step.inputEq.geq.enabled ? 'ON' : 'OFF')}</strong></div>`);
+    if (step?.inputEq?.peq) values.push(`<div><span>INPUT PEQ</span><strong>${escape(`${step.inputEq.peq.bands?.length || 0} bands${step.inputEq.peq.enabled == null ? '' : step.inputEq.peq.enabled ? ' · ON' : ' · OFF'}`)}</strong></div>`);
     Object.entries(step?.crossovers || {}).forEach(([way, value]) => ['hpf', 'lpf'].forEach(side => { const xo = value[side]; if (xo) values.push(`<div><span>${escape(label(way))} ${side.toUpperCase()}</span><strong>${escape(`${xo.freqHz || 'baseline'} Hz · ${xo.family || 'baseline'} ${xo.order ? `· ${xo.order}` : ''}`)}</strong></div>`); }));
     return values.length ? values.join('') : '<p class="empty-state">No processing delta.</p>';
   }

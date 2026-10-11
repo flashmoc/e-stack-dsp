@@ -1,5 +1,8 @@
 'use strict';
 
+const inputEqState = require('../public/prototypes/estack-ui/shared/domain/input-eq-state');
+const inputModel = require('../public/prototypes/estack-ui/shared/domain/input-processing-model');
+
 const WAY_DEFS = Object.freeze({
     SUB: Object.freeze({ key: 'SUB', channel: 0, label: 'SUB', out: 1 }),
     KICK: Object.freeze({ key: 'KICK', channel: 1, label: 'KICK', out: 2 }),
@@ -97,7 +100,7 @@ function normalizePhase(value, label) {
     return result;
 }
 
-function normalizePeq(value, label) {
+function normalizePeq(value, label, version) {
     if (!Array.isArray(value) || !value.length || value.length > MAX_PEQ_SLOTS) {
         throw new Error(`${label}.peq must contain 1..${MAX_PEQ_SLOTS} filters`);
     }
@@ -113,16 +116,22 @@ function normalizePeq(value, label) {
         const slot = boundedNumber(raw.slot, 1, MAX_PEQ_SLOTS, `${name}.slot`);
         if (!Number.isInteger(slot) || slots.has(slot)) throw new Error(`${name}.slot must be a unique integer`);
         slots.add(slot);
+        const type = raw.type == null ? 'Peaking' : String(raw.type);
+        if (version < 3 && raw.type != null) throw new Error(`${name}.type requires batch version 3`);
+        if (!inputModel.EQ_TYPES.includes(type)) throw new Error(`${name}.type must be Peaking, Lowshelf or Highshelf`);
+        if (version < 3 && raw.enabled != null) throw new Error(`${name}.enabled requires batch version 3`);
+        if (raw.enabled != null && typeof raw.enabled !== 'boolean') throw new Error(`${name}.enabled must be a boolean`);
         return {
             slot,
             freqHz: boundedNumber(raw.freqHz, 20, 20000, `${name}.freqHz`),
-            q: boundedNumber(raw.q, 0.3, 12, `${name}.q`),
-            gainDb: boundedNumber(raw.gainDb, -18, 0, `${name}.gainDb`)
+            q: boundedNumber(raw.q, version >= 3 ? 0.1 : 0.3, version >= 3 ? 20 : 12, `${name}.q`),
+            gainDb: boundedNumber(raw.gainDb, version >= 3 ? -12 : -18, version >= 3 ? 12 : 0, `${name}.gainDb`),
+            ...(version >= 3 ? { type, enabled: raw.enabled !== false } : {})
         };
     });
 }
 
-function normalizeWayOverride(value, label) {
+function normalizeWayOverride(value, label, version) {
     if (value == null) return {};
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
     if (value.delayMs != null && value.delayOffsetMs != null) throw new Error(`${label} cannot define both delayMs and delayOffsetMs`);
@@ -131,13 +140,69 @@ function normalizeWayOverride(value, label) {
     if (value.delayOffsetMs != null) result.delayOffsetMs = boundedNumber(value.delayOffsetMs, -50, 50, `${label}.delayOffsetMs`);
     // Measurement batches may attenuate a way but never raise it above the captured baseline.
     if (value.gainOffsetDb != null) result.gainOffsetDb = boundedNumber(value.gainOffsetDb, -60, 0, `${label}.gainOffsetDb`);
+    if (value.gainDb != null) {
+        if (version < 3) throw new Error(`${label}.gainDb requires batch version 3`);
+        result.gainDb = boundedNumber(value.gainDb, -60, 6, `${label}.gainDb`);
+    }
+    if (result.gainDb != null && result.gainOffsetDb != null) throw new Error(`${label} cannot define both gainDb and gainOffsetDb`);
     if (value.polarity != null) {
         const polarity = String(value.polarity).trim().toLowerCase();
         if (!['normal', 'inverted'].includes(polarity)) throw new Error(`${label}.polarity must be normal or inverted`);
         result.polarity = polarity;
     }
     if (value.phase != null) result.phase = normalizePhase(value.phase, label);
-    if (value.peq != null) result.peq = normalizePeq(value.peq, label);
+    if (value.peq != null) result.peq = normalizePeq(value.peq, label, version);
+    return result;
+}
+
+function normalizeInputEq(value, label) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
+    for (const key of Object.keys(value)) if (!['geq', 'peq'].includes(key)) throw new Error(`${label}.${key} is not an input EQ setting`);
+    const result = {};
+    if (value.geq != null) {
+        const geq = value.geq;
+        if (!geq || typeof geq !== 'object' || Array.isArray(geq)) throw new Error(`${label}.geq must be an object`);
+        for (const key of Object.keys(geq)) if (!['enabled', 'targets'].includes(key)) throw new Error(`${label}.geq.${key} is not supported`);
+        result.geq = {};
+        if (geq.enabled != null) {
+            if (typeof geq.enabled !== 'boolean') throw new Error(`${label}.geq.enabled must be a boolean`);
+            result.geq.enabled = geq.enabled;
+        }
+        if (geq.targets != null) result.geq.targets = require('../public/prototypes/estack-ui/shared/domain/graphic-eq-fit').targets(geq.targets);
+        if (!Object.keys(result.geq).length) throw new Error(`${label}.geq has no settings`);
+    }
+    if (value.peq != null) {
+        const peq = value.peq;
+        if (!peq || typeof peq !== 'object' || Array.isArray(peq)) throw new Error(`${label}.peq must be an object`);
+        for (const key of Object.keys(peq)) if (!['enabled', 'bands'].includes(key)) throw new Error(`${label}.peq.${key} is not supported`);
+        result.peq = {};
+        if (peq.enabled != null) {
+            if (typeof peq.enabled !== 'boolean') throw new Error(`${label}.peq.enabled must be a boolean`);
+            result.peq.enabled = peq.enabled;
+        }
+        if (peq.bands != null) {
+            if (!Array.isArray(peq.bands) || !peq.bands.length || peq.bands.length > 10) throw new Error(`${label}.peq.bands must contain 1..10 bands`);
+            const slots = new Set();
+            result.peq.bands = peq.bands.map((raw, index) => {
+                const name = `${label}.peq.bands[${index}]`;
+                if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${name} must be an object`);
+                for (const key of Object.keys(raw)) if (!['slot', 'type', 'freqHz', 'q', 'gainDb', 'enabled'].includes(key)) throw new Error(`${name}.${key} is not supported`);
+                if (!Number.isInteger(raw.slot) || raw.slot < 1 || raw.slot > 10 || slots.has(raw.slot)) throw new Error(`${name}.slot must be a unique integer from 1 to 10`);
+                slots.add(raw.slot);
+                const type = raw.type == null ? 'Peaking' : String(raw.type);
+                if (!inputModel.EQ_TYPES.includes(type)) throw new Error(`${name}.type must be Peaking, Lowshelf or Highshelf`);
+                if (raw.enabled != null && typeof raw.enabled !== 'boolean') throw new Error(`${name}.enabled must be a boolean`);
+                for (const key of ['freqHz', 'q', 'gainDb']) if (typeof raw[key] !== 'number' || !Number.isFinite(raw[key])) throw new Error(`${name}.${key} must be a finite number`);
+                return { slot: raw.slot, type,
+                    freqHz: boundedNumber(raw.freqHz, 20, 20000, `${name}.freqHz`),
+                    q: boundedNumber(raw.q, 0.1, 20, `${name}.q`),
+                    gainDb: boundedNumber(raw.gainDb, -12, 12, `${name}.gainDb`),
+                    enabled: raw.enabled !== false };
+            });
+        }
+        if (!Object.keys(result.peq).length) throw new Error(`${label}.peq has no settings`);
+    }
+    if (!Object.keys(result).length) throw new Error(`${label} has no settings`);
     return result;
 }
 
@@ -197,7 +262,7 @@ function normalizeRew(value, id, name) {
 function normalizeBatch(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Measurement batch must be a JSON object');
     const version = Number(input.version ?? 1);
-    if (version !== 1 && version !== 2) throw new Error(`Unsupported measurement batch version '${input.version}'`);
+    if (![1, 2, 3].includes(version)) throw new Error(`Unsupported measurement batch version '${input.version}'`);
     const name = text(input.name, 120, 'Batch name');
     if (!name) throw new Error('Batch name is required');
     const description = text(input.description, 1200, 'Batch description');
@@ -229,7 +294,7 @@ function normalizeBatch(input) {
             if (!raw.ways || typeof raw.ways !== 'object' || Array.isArray(raw.ways)) throw new Error(`Step ${id} ways must be an object`);
             for (const [rawKey, value] of Object.entries(raw.ways)) {
                 const key = normalizeWayKey(rawKey);
-                ways[key] = normalizeWayOverride(value, `Step ${id} ways.${key}`);
+                ways[key] = normalizeWayOverride(value, `Step ${id} ways.${key}`, version);
                 if (version < 2 && ways[key].peq) throw new Error(`Step ${id} output PEQ requires batch version 2`);
             }
         }
@@ -241,6 +306,12 @@ function normalizeBatch(input) {
             }
         }
 
+        if (raw.inputEq != null && version < 3) throw new Error(`Step ${id} inputEq requires batch version 3`);
+        const inputEq = raw.inputEq == null ? null : normalizeInputEq(raw.inputEq, `Step ${id} inputEq`);
+        if (inputEq && [...defaults.disabledFilters, ...normalizeDisabledFilters(raw.disabledFilters, `Step ${id} disabledFilters`)]
+            .some(name => [...inputEqState.GEQ_NAMES, ...inputModel.GLOBAL_EQ_SLOT_NAMES].includes(name))) {
+            throw new Error(`Step ${id} cannot combine inputEq with disabledFilters targeting input EQ; use enabled instead`);
+        }
         return {
             id,
             name: stepName,
@@ -249,6 +320,7 @@ function normalizeBatch(input) {
             activeWays: normalizeWayList(raw.activeWays, `Step ${id} activeWays`),
             ways,
             crossovers,
+            ...(inputEq ? { inputEq } : {}),
             disabledFilters: normalizeDisabledFilters(raw.disabledFilters, `Step ${id} disabledFilters`),
             rew: normalizeRew(raw.rew, id, stepName)
         };
@@ -256,7 +328,7 @@ function normalizeBatch(input) {
 
     if (defaults.processingMode === 'live-snapshot') {
         if (steps.length !== 1 || !defaults.muteUnlisted || defaults.disabledFilters.length ||
-            steps.some(step => Object.keys(step.ways).length || Object.keys(step.crossovers).length || step.disabledFilters.length)) {
+            steps.some(step => Object.keys(step.ways).length || Object.keys(step.crossovers).length || step.disabledFilters.length || step.inputEq)) {
             throw new Error('Live snapshot must contain one measurement with no gain, filter or crossover overrides');
         }
     }
@@ -490,7 +562,7 @@ function applyPhase(config, wayKey, spec) {
     attachPhaseBeforeGain(config, wayKey, name);
 }
 
-function applyOutputPeq(config, wayKey, peqs) {
+function applyOutputPeq(config, wayKey, peqs, version) {
     const channel = WAY_DEFS[wayKey].channel;
     const gainName = gainFilterName(config, wayKey);
     const mixerIndex = firstMixerIndex(config);
@@ -510,15 +582,26 @@ function applyOutputPeq(config, wayKey, peqs) {
             }
         }
         const existing = config.filters[name];
-        if (existing && (!stage.names.includes(name) || existing.type !== 'Biquad' || existing.parameters?.type !== 'Peaking')) {
-            throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} is not an independent peaking filter`);
+        if (existing && (existing.type !== 'Biquad' ||
+            !(version >= 3 ? inputModel.EQ_TYPES : ['Peaking']).includes(existing.parameters?.type))) {
+            throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} is not an independent supported EQ filter`);
+        }
+        if (existing && !stage.names.includes(name) &&
+            (version < 3 || spec.enabled === false)) {
+            throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} is not active in its independent Gain stage`);
         }
         if (existing && (typeof existing.parameters.gain !== 'number' || !Number.isFinite(existing.parameters.gain))) {
             throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} has an invalid captured gain`);
         }
+        if (spec.enabled === false) {
+            if (!existing) throw new Error(`${WAY_DEFS[wayKey].label} cannot disable missing PEQ slot ${spec.slot}`);
+            stage.names = stage.names.filter(item => item !== name);
+            continue;
+        }
         if (existing && spec.gainDb > Number(existing.parameters.gain) + 3) {
             throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} cannot raise its captured baseline by more than 3 dB`);
         }
+        if (!existing && spec.gainDb > 3) throw new Error(`${WAY_DEFS[wayKey].label} new PEQ slot ${spec.slot} cannot boost by more than 3 dB`);
         if (!existing) {
             config.filters[name] = {
                 type: 'Biquad',
@@ -526,10 +609,56 @@ function applyOutputPeq(config, wayKey, peqs) {
                 parameters: { type: 'Peaking' }
             };
             stage.names.splice(stage.names.indexOf(gainName), 0, name);
+        } else if (!stage.names.includes(name)) {
+            stage.names.splice(stage.names.indexOf(gainName), 0, name);
         }
         Object.assign(config.filters[name].parameters, {
-            freq: spec.freqHz, q: spec.q, gain: spec.gainDb
+            type: spec.type || 'Peaking', freq: spec.freqHz, q: spec.q, gain: spec.gainDb
         });
+    }
+}
+
+function activeInputEqResponse(config, frequency) {
+    const mixer = firstMixerIndex(config);
+    const names = new Set((config.pipeline || []).slice(0, mixer).filter(stage =>
+        stage?.type === 'Filter' && stage.bypassed !== true
+    ).flatMap(stage => stage.names || []));
+    const rate = Number(config.devices.samplerate);
+    return [...inputEqState.GEQ_NAMES, ...inputModel.GLOBAL_EQ_SLOT_NAMES].reduce((sum, name) => {
+        if (!names.has(name)) return sum;
+        const p = config.filters[name]?.parameters;
+        return sum + inputModel.rawResponseAt({ type: p.type, frequency: p.freq, gain: p.gain, q: p.q }, frequency, rate);
+    }, 0);
+}
+
+function applyInputEq(config, baseline, candidate) {
+    // The same semantic state and fit are used by Input Processing. Refuse
+    // ambiguous ownership before touching any shared L/R filter definition.
+    inputEqState.validate(baseline);
+    const state = inputEqState.read(config);
+    if (candidate.geq) {
+        if (candidate.geq.enabled != null) state.geq.enabled = candidate.geq.enabled;
+        if (candidate.geq.targets) state.geq.targets = candidate.geq.targets;
+    }
+    if (candidate.peq) {
+        if (candidate.peq.enabled != null) state.peq.enabled = candidate.peq.enabled;
+        for (const band of candidate.peq.bands || []) {
+            const name = inputModel.GLOBAL_EQ_SLOT_NAMES[band.slot - 1];
+            const existing = config.filters[name];
+            if (existing && existing.type !== 'Biquad') throw new Error(`Input PEQ slot ${band.slot} is not a Biquad`);
+            config.filters[name] = inputModel.filterForBand({ slot: name, type: band.type, frequency: band.freqHz,
+                q: band.q, gain: band.gainDb });
+            state.peq.disabled = state.peq.disabled.filter(item => item !== name);
+            if (!band.enabled) state.peq.disabled.push(name);
+        }
+    }
+    inputEqState.rebuild(config, state, { fitGeq: !!candidate.geq?.targets });
+    // A candidate may attenuate freely, but it must not add more than 3 dB
+    // anywhere across the input EQ chain relative to the captured baseline.
+    for (let i = 0; i <= 160; i++) {
+        const frequency = 20 * (1000 ** (i / 160));
+        const delta = activeInputEqResponse(config, frequency) - activeInputEqResponse(baseline, frequency);
+        if (delta > 3.05) throw new Error(`Input EQ candidate boosts the captured response by ${delta.toFixed(1)} dB at ${frequency.toFixed(0)} Hz; maximum is +3 dB`);
     }
 }
 
@@ -556,6 +685,7 @@ function applyStep(baselineConfig, batchInput, stepOrIndex) {
         }
     }
 
+    if (step.inputEq) applyInputEq(next, baselineConfig, step.inputEq);
     for (const filterName of [...batch.defaults.disabledFilters, ...step.disabledFilters]) disableInputFilter(next, filterName);
 
     for (const [wayKey, override] of Object.entries(step.ways || {})) {
@@ -579,6 +709,14 @@ function applyStep(baselineConfig, batchInput, stepOrIndex) {
             next.filters[name].parameters.gain = baselineGain + override.gainOffsetDb;
             next.filters[name].parameters.scale = 'dB';
         }
+        if (override.gainDb != null) {
+            const name = gainFilterName(next, wayKey);
+            const baselineGain = Number(baselineConfig?.filters?.[name]?.parameters?.gain);
+            if (!Number.isFinite(baselineGain)) throw new Error(`${WAY_DEFS[wayKey].label} baseline gain is invalid`);
+            if (override.gainDb > baselineGain + 3) throw new Error(`${WAY_DEFS[wayKey].label} gainDb cannot exceed captured gain by more than 3 dB`);
+            next.filters[name].parameters.gain = override.gainDb;
+            next.filters[name].parameters.scale = 'dB';
+        }
     }
 
     const sharedRequests = new Map();
@@ -600,7 +738,7 @@ function applyStep(baselineConfig, batchInput, stepOrIndex) {
     // as HPF/LPF therefore uses the actual crossover frequency of this step.
     for (const [wayKey, override] of Object.entries(step.ways || {})) {
         if (override.phase) applyPhase(next, wayKey, override.phase);
-        if (override.peq) applyOutputPeq(next, wayKey, override.peq);
+        if (override.peq) applyOutputPeq(next, wayKey, override.peq, batch.version);
     }
 
     return next;
@@ -646,6 +784,7 @@ function describeStep(step, index, total) {
         activeWayLabels: step.activeWays.map(key => WAY_DEFS[key]?.label || key),
         ways: clone(step.ways || {}),
         crossovers: clone(step.crossovers || {}),
+        inputEq: clone(step.inputEq || null),
         disabledFilters: [...(step.disabledFilters || [])],
         rew,
         summary: `${step.id} · ${step.name} · ${ways}${sweep ? ` · ${sweep}` : ''}`
