@@ -21,6 +21,7 @@ const WAY_ALIASES = Object.freeze({
 const CROSSOVER_FAMILIES = new Set(['LinkwitzRiley', 'Butterworth']);
 const PHASE_REFERENCES = new Set(['auto', 'hpf', 'lpf']);
 const PHASE_PREFIX = 'ESTACK_PHASE_';
+const MAX_PEQ_SLOTS = 10;
 const MAX_STEPS = 500;
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
 
@@ -96,6 +97,26 @@ function normalizePhase(value, label) {
     return result;
 }
 
+function normalizePeq(value, label) {
+    if (!Array.isArray(value) || !value.length || value.length > MAX_PEQ_SLOTS) {
+        throw new Error(`${label}.peq must contain 1..${MAX_PEQ_SLOTS} filters`);
+    }
+    const slots = new Set();
+    return value.map((raw, index) => {
+        const name = `${label}.peq[${index}]`;
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${name} must be an object`);
+        const slot = boundedNumber(raw.slot, 1, MAX_PEQ_SLOTS, `${name}.slot`);
+        if (!Number.isInteger(slot) || slots.has(slot)) throw new Error(`${name}.slot must be a unique integer`);
+        slots.add(slot);
+        return {
+            slot,
+            freqHz: boundedNumber(raw.freqHz, 20, 20000, `${name}.freqHz`),
+            q: boundedNumber(raw.q, 0.3, 12, `${name}.q`),
+            gainDb: boundedNumber(raw.gainDb, -18, 0, `${name}.gainDb`)
+        };
+    });
+}
+
 function normalizeWayOverride(value, label) {
     if (value == null) return {};
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -111,6 +132,7 @@ function normalizeWayOverride(value, label) {
         result.polarity = polarity;
     }
     if (value.phase != null) result.phase = normalizePhase(value.phase, label);
+    if (value.peq != null) result.peq = normalizePeq(value.peq, label);
     return result;
 }
 
@@ -169,7 +191,8 @@ function normalizeRew(value, id, name) {
 
 function normalizeBatch(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Measurement batch must be a JSON object');
-    if (Number(input.version ?? 1) !== 1) throw new Error(`Unsupported measurement batch version '${input.version}'`);
+    const version = Number(input.version ?? 1);
+    if (version !== 1 && version !== 2) throw new Error(`Unsupported measurement batch version '${input.version}'`);
     const name = text(input.name, 120, 'Batch name');
     if (!name) throw new Error('Batch name is required');
     const description = text(input.description, 1200, 'Batch description');
@@ -202,6 +225,7 @@ function normalizeBatch(input) {
             for (const [rawKey, value] of Object.entries(raw.ways)) {
                 const key = normalizeWayKey(rawKey);
                 ways[key] = normalizeWayOverride(value, `Step ${id} ways.${key}`);
+                if (version < 2 && ways[key].peq) throw new Error(`Step ${id} output PEQ requires batch version 2`);
             }
         }
         if (raw.crossovers != null) {
@@ -231,7 +255,7 @@ function normalizeBatch(input) {
             throw new Error('Live snapshot must contain one measurement with no gain, filter or crossover overrides');
         }
     }
-    return { schema: 'estack.measurement-batch', version: 1, name, description, defaults, steps };
+    return { schema: 'estack.measurement-batch', version, name, description, defaults, steps };
 }
 
 function firstMixerIndex(config) {
@@ -461,6 +485,46 @@ function applyPhase(config, wayKey, spec) {
     attachPhaseBeforeGain(config, wayKey, name);
 }
 
+function applyOutputPeq(config, wayKey, peqs) {
+    const channel = WAY_DEFS[wayKey].channel;
+    const gainName = gainFilterName(config, wayKey);
+    const mixerIndex = firstMixerIndex(config);
+    const stages = (config.pipeline || []).slice(mixerIndex + 1)
+        .filter(step => step?.type === 'Filter' && Array.isArray(step.names) && step.names.includes(gainName));
+    if (stages.length !== 1 || stepChannels(stages[0]).length !== 1 || stepChannels(stages[0])[0] !== channel) {
+        throw new Error(`${WAY_DEFS[wayKey].label} output PEQ requires one independent Gain stage`);
+    }
+    const stage = stages[0];
+    const nyquist = Number(config?.devices?.samplerate || 48000) / 2;
+    for (const spec of peqs) {
+        if (spec.freqHz >= nyquist) throw new Error(`${WAY_DEFS[wayKey].label} PEQ frequency must be below Nyquist`);
+        const name = `USER_CH${channel}_PEQ_${String(spec.slot).padStart(2, '0')}`;
+        for (const reference of config.pipeline || []) {
+            if (reference?.type === 'Filter' && reference !== stage && (reference.names || []).includes(name)) {
+                throw new Error(`${WAY_DEFS[wayKey].label} PEQ '${name}' is shared with another stage`);
+            }
+        }
+        const existing = config.filters[name];
+        if (existing && (!stage.names.includes(name) || existing.type !== 'Biquad' || existing.parameters?.type !== 'Peaking')) {
+            throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} is not an independent peaking filter`);
+        }
+        if (existing && spec.gainDb > Number(existing.parameters.gain) + 3) {
+            throw new Error(`${WAY_DEFS[wayKey].label} PEQ slot ${spec.slot} cannot raise its captured baseline by more than 3 dB`);
+        }
+        if (!existing) {
+            config.filters[name] = {
+                type: 'Biquad',
+                description: `E-Stack PEQ ${String(spec.slot).padStart(2, '0')} · ${WAY_DEFS[wayKey].label}`,
+                parameters: { type: 'Peaking' }
+            };
+            stage.names.splice(stage.names.indexOf(gainName), 0, name);
+        }
+        Object.assign(config.filters[name].parameters, {
+            freq: spec.freqHz, q: spec.q, gain: spec.gainDb
+        });
+    }
+}
+
 function applyStep(baselineConfig, batchInput, stepOrIndex) {
     const batch = normalizeBatch(batchInput);
     const step = typeof stepOrIndex === 'number' ? batch.steps[stepOrIndex] : stepOrIndex;
@@ -528,6 +592,7 @@ function applyStep(baselineConfig, batchInput, stepOrIndex) {
     // as HPF/LPF therefore uses the actual crossover frequency of this step.
     for (const [wayKey, override] of Object.entries(step.ways || {})) {
         if (override.phase) applyPhase(next, wayKey, override.phase);
+        if (override.peq) applyOutputPeq(next, wayKey, override.peq);
     }
 
     return next;
@@ -592,3 +657,4 @@ module.exports = {
     allpassFrequencyForPhase,
     clone
 };
+
