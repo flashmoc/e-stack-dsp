@@ -97,8 +97,8 @@ const stillIndependent = model.applyStep(sharedInWayStage, batch, 0);
 assert.strictEqual(stillIndependent.filters.mid_l_delay.parameters.delay, 3.51);
 assert.strictEqual(stillIndependent.filters.sub_delay.parameters.delay, 0);
 
-// A full live export was not attached. If provided locally, test the complete
-// 34-step campaign against that exact config via ESTACK_LIVE_EXPORT_CONFIG.
+// The operator's full live export remains local and is not committed: set
+// ESTACK_LIVE_EXPORT_CONFIG to replay the campaign against that exact graph.
 const campaignPath = process.env.ESTACK_DELAY_PHASE_CAMPAIGN;
 if (campaignPath) {
     const campaign = model.normalizeBatch(JSON.parse(fs.readFileSync(campaignPath, 'utf8')));
@@ -115,6 +115,14 @@ if (campaignPath) {
         assert.deepStrictEqual(step.filters.sub_delay, live.filters.sub_delay, `step ${index + 1} changed shared Delay`);
         assert.deepStrictEqual(step.mixers.estack_preview.mapping.slice(6), live.mixers.estack_preview.mapping.slice(6),
             `step ${index + 1} changed the two non-way destinations`);
+        for (const [wayKey, override] of Object.entries(campaign.steps[index].ways || {})) {
+            if (override.delayOffsetMs == null) continue;
+            const filterName = `${wayKey.toLowerCase()}_delay`;
+            const baselineDelay = Number(live.filters[filterName]?.parameters?.delay);
+            assert(Number.isFinite(baselineDelay), `step ${index + 1} lacks an independent ${filterName}`);
+            assert.strictEqual(step.filters[filterName].parameters.delay, baselineDelay + override.delayOffsetMs,
+                `step ${index + 1} did not apply ${wayKey} offset to its independent Delay`);
+        }
     }
     assert.deepStrictEqual(live, liveBefore, 'campaign mutated the captured baseline');
     console.log(`OK:   ${campaign.steps.length} campaign steps against ${livePath ? 'attached live export' : 'exported processing shape'}`);
