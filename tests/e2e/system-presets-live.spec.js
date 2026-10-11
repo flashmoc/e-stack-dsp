@@ -149,6 +149,7 @@ test("system capture/apply/startup preserves hardware and mixed records, locks t
             (await (await request.get("/api/startup-config")).json()).mode,
         )
         .toBe(mode);
+      await expect(page.locator("#state")).toHaveText("Live system");
       expect(await dsp("GetConfigJson")).toEqual(current);
       expect(await dsp("GetVolume")).toBe(-19);
     }
