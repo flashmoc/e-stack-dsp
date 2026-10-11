@@ -35,6 +35,10 @@ test('version 3 input and way EQ candidates use the captured baseline and restor
         expect((await post('/api/measurement-batch/next')).ok()).toBe(true);
         expect(await dsp('GetConfigJson')).toEqual(baseline);
         expect(await dsp('GetVolume')).toBe(master);
+        expect((await post('/api/measurement-batch/start')).ok()).toBe(true);
+        expect((await post('/api/measurement-batch/abort')).ok()).toBe(true);
+        expect(await dsp('GetConfigJson')).toEqual(baseline);
+        expect(await dsp('GetVolume')).toBe(master);
     } finally {
         await post('/api/measurement-batch/abort');
         expect(await dsp('GetConfigJson')).toEqual(baseline);

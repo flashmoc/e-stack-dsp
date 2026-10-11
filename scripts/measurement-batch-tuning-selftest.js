@@ -88,11 +88,16 @@ assert.throws(() => model.normalizeBatch(campaign({ inputEq: { peq: { bands: [{ 
 assert.throws(() => model.normalizeBatch(campaign({ inputEq: { geq: { targets: [1] } } })), /ten target gains/);
 assert.throws(() => model.normalizeBatch(campaign({ inputEq: { peq: { bands: [{ slot: 1, freqHz: 125, q: 1, gainDb: -1 }] } }, disabledFilters: ['GLOBAL_EQ_01'] })), /cannot combine inputEq with disabledFilters/);
 assert.throws(() => model.normalizeBatch(campaign({ ways: { MID_L: { muted: true } } })), /muted is not supported/);
+assert.throws(() => model.normalizeBatch(campaign({ ways: { MID_L: { peq: [{ slot: 1, freqHz: 1350, q: 1, gainDb: -5, unknown: true }] } } })), /unknown is not supported/);
 assert.throws(() => model.normalizeBatch(campaign({ ways: { HIGH_L: { gainDb: -12 } } })), /does not include it in activeWays/);
 assert.throws(() => model.normalizeBatch({ ...campaign({}), defaults: { masterDb: -20 } }), /masterDb is not supported/);
 assert.throws(() => model.applyStep(base, campaign({ ways: { MID_L: { gainDb: -6 } } }), 0), /captured gain by more than 3 dB/);
 assert.throws(() => model.applyStep(base, campaign({ inputEq: { geq: { targets: Array(10).fill(12) } } }), 0), /boosts the captured EQ and gain response/);
 assert.throws(() => model.applyStep(base, campaign({ ways: { MID_L: { peq: [{ slot: 1, freqHz: 1350, q: 1, gainDb: -5, enabled: false }] } } }), 0), /boosts the captured EQ and gain response/);
+const legacyCut = model.clone(base);
+legacyCut.filters.LEGACY_INPUT_CUT = { type: 'Biquad', parameters: { type: 'Peaking', freq: 1000, q: 1, gain: -8 } };
+legacyCut.pipeline.unshift({ type: 'Filter', channels: [0, 1], names: ['LEGACY_INPUT_CUT'] });
+assert.throws(() => model.applyStep(legacyCut, campaign({ disabledFilters: ['LEGACY_INPUT_CUT'] }), 0), /boosts the captured EQ and gain response/);
 assert.throws(() => model.applyStep(base, campaign({ ways: { MID_L: { peq: [{ slot: 1, type: 'Peaking', freqHz: 1350, q: 1, gainDb: 0 }] } } }), 0), /captured baseline by more than 3 dB/);
 const shared = model.clone(base);
 shared.pipeline.push({ type: 'Filter', channels: [3], names: ['USER_CH2_PEQ_01'] });

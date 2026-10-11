@@ -112,6 +112,7 @@ function normalizePeq(value, label, version) {
     return value.map((raw, index) => {
         const name = `${label}.peq[${index}]`;
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${name} must be an object`);
+        if (version >= 3) assertKnownKeys(raw, ['slot', 'freqHz', 'q', 'gainDb', 'type', 'enabled'], name);
         for (const key of ['slot', 'freqHz', 'q', 'gainDb']) {
             if (typeof raw[key] !== 'number' || !Number.isFinite(raw[key])) {
                 throw new Error(`${name}.${key} must be a finite number`);
@@ -790,7 +791,8 @@ function applyStep(baselineConfig, batchInput, stepOrIndex) {
         if (override.peq) applyOutputPeq(next, wayKey, override.peq, batch.version);
     }
 
-    if (batch.version >= 3 && (step.inputEq || Object.values(step.ways || {}).some(way => way.gainDb != null || way.peq))) {
+    if (batch.version >= 3 && (step.inputEq || batch.defaults.disabledFilters.length || step.disabledFilters.length ||
+        Object.values(step.ways || {}).some(way => way.gainDb != null || way.peq))) {
         assertV3CandidateBoost(baselineConfig, next, step.activeWays);
     }
 
