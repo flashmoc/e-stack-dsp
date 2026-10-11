@@ -43,7 +43,7 @@ const batch = { version: 3, name: 'EQ and way tuning', defaults: { measurementIn
         geq: { targets: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
         peq: { bands: [{ slot: 1, freqHz: 125, q: 1, gainDb: -5 }] }
     }, ways: {
-        MID_L: { gainDb: -12, peq: [{ slot: 1, type: 'Lowshelf', freqHz: 500, q: 1, gainDb: -4 }] },
+        MID_L: { gainDb: -13, peq: [{ slot: 1, type: 'Lowshelf', freqHz: 500, q: 1, gainDb: -4 }] },
         HIGH_L: { peq: [{ slot: 2, freqHz: 4200, q: 1, gainDb: -2 }] }
     } },
     { id: 'B', activeWays: ['MID_L', 'HIGH_L'] }
@@ -53,7 +53,7 @@ const a = model.applyStep(base, normalized, 0);
 const b = model.applyStep(base, normalized, 1);
 assert.strictEqual(a.filters.GLOBAL_EQ_01.parameters.gain, -5);
 assert.strictEqual(inputState.read(a).geq.targets[0], 0);
-assert.strictEqual(a.filters.gain_2.parameters.gain, -12);
+assert.strictEqual(a.filters.gain_2.parameters.gain, -13);
 assert.strictEqual(a.filters.USER_CH2_PEQ_01.parameters.type, 'Lowshelf');
 assert.strictEqual(a.filters.USER_CH4_PEQ_02.parameters.gain, -2);
 assert.strictEqual(a.filters.gain_0.parameters.mute, true);
@@ -75,7 +75,7 @@ assert.strictEqual(JSON.stringify(base), original, 'captured baseline mutated');
 
 const disabled = model.applyStep(base, { version: 3, name: 'disable EQ', steps: [{
     activeWays: ['MID_L'], inputEq: { geq: { enabled: false }, peq: { enabled: false } },
-    ways: { MID_L: { peq: [{ slot: 1, freqHz: 1350, q: 1, gainDb: -5, enabled: false }] } }
+    ways: { MID_L: { gainDb: -16, peq: [{ slot: 1, freqHz: 1350, q: 1, gainDb: -5, enabled: false }] } }
 }] }, 0);
 assert.strictEqual(inputState.read(disabled).geq.enabled, false);
 assert.strictEqual(inputState.read(disabled).peq.enabled, false);
@@ -87,8 +87,12 @@ assert.throws(() => model.normalizeBatch({ ...batch, version: 2 }), /inputEq req
 assert.throws(() => model.normalizeBatch(campaign({ inputEq: { peq: { bands: [{ slot: 1, freqHz: null, q: 1, gainDb: -1 }] } } })), /freqHz must be a finite number/);
 assert.throws(() => model.normalizeBatch(campaign({ inputEq: { geq: { targets: [1] } } })), /ten target gains/);
 assert.throws(() => model.normalizeBatch(campaign({ inputEq: { peq: { bands: [{ slot: 1, freqHz: 125, q: 1, gainDb: -1 }] } }, disabledFilters: ['GLOBAL_EQ_01'] })), /cannot combine inputEq with disabledFilters/);
+assert.throws(() => model.normalizeBatch(campaign({ ways: { MID_L: { muted: true } } })), /muted is not supported/);
+assert.throws(() => model.normalizeBatch(campaign({ ways: { HIGH_L: { gainDb: -12 } } })), /does not include it in activeWays/);
+assert.throws(() => model.normalizeBatch({ ...campaign({}), defaults: { masterDb: -20 } }), /masterDb is not supported/);
 assert.throws(() => model.applyStep(base, campaign({ ways: { MID_L: { gainDb: -6 } } }), 0), /captured gain by more than 3 dB/);
-assert.throws(() => model.applyStep(base, campaign({ inputEq: { geq: { targets: Array(10).fill(12) } } }), 0), /boosts the captured response/);
+assert.throws(() => model.applyStep(base, campaign({ inputEq: { geq: { targets: Array(10).fill(12) } } }), 0), /boosts the captured EQ and gain response/);
+assert.throws(() => model.applyStep(base, campaign({ ways: { MID_L: { peq: [{ slot: 1, freqHz: 1350, q: 1, gainDb: -5, enabled: false }] } } }), 0), /boosts the captured EQ and gain response/);
 assert.throws(() => model.applyStep(base, campaign({ ways: { MID_L: { peq: [{ slot: 1, type: 'Peaking', freqHz: 1350, q: 1, gainDb: 0 }] } } }), 0), /captured baseline by more than 3 dB/);
 const shared = model.clone(base);
 shared.pipeline.push({ type: 'Filter', channels: [3], names: ['USER_CH2_PEQ_01'] });

@@ -52,6 +52,10 @@ function text(value, max, label, fallback = '') {
     return result;
 }
 
+function assertKnownKeys(value, allowed, label) {
+    for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`${label}.${key} is not supported`);
+}
+
 function normalizeWayKey(value) {
     const raw = String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
     const key = WAY_ALIASES[raw] || WAY_ALIASES[raw.replace(/_/g, '')];
@@ -134,6 +138,7 @@ function normalizePeq(value, label, version) {
 function normalizeWayOverride(value, label, version) {
     if (value == null) return {};
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
+    if (version >= 3) assertKnownKeys(value, ['delayMs', 'delayOffsetMs', 'gainOffsetDb', 'gainDb', 'polarity', 'phase', 'peq'], label);
     if (value.delayMs != null && value.delayOffsetMs != null) throw new Error(`${label} cannot define both delayMs and delayOffsetMs`);
     const result = {};
     if (value.delayMs != null) result.delayMs = boundedNumber(value.delayMs, 0, 100, `${label}.delayMs`);
@@ -263,6 +268,7 @@ function normalizeBatch(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Measurement batch must be a JSON object');
     const version = Number(input.version ?? 1);
     if (![1, 2, 3].includes(version)) throw new Error(`Unsupported measurement batch version '${input.version}'`);
+    if (version >= 3) assertKnownKeys(input, ['schema', 'version', 'name', 'description', 'defaults', 'steps'], 'batch');
     const name = text(input.name, 120, 'Batch name');
     if (!name) throw new Error('Batch name is required');
     const description = text(input.description, 1200, 'Batch description');
@@ -270,6 +276,7 @@ function normalizeBatch(input) {
     if (input.steps.length > MAX_STEPS) throw new Error(`Batch cannot exceed ${MAX_STEPS} steps`);
 
     const rawDefaults = input.defaults && typeof input.defaults === 'object' && !Array.isArray(input.defaults) ? input.defaults : {};
+    if (version >= 3) assertKnownKeys(rawDefaults, ['muteUnlisted', 'settleMs', 'disabledFilters', 'processingMode', 'measurementInput'], 'defaults');
     const defaults = {
         muteUnlisted: rawDefaults.muteUnlisted !== false,
         settleMs: rawDefaults.settleMs == null ? 500 : Math.round(boundedNumber(rawDefaults.settleMs, 0, 5000, 'defaults.settleMs')),
@@ -283,6 +290,7 @@ function normalizeBatch(input) {
     const ids = new Set();
     const steps = input.steps.map((raw, index) => {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`Step ${index + 1} must be an object`);
+        if (version >= 3) assertKnownKeys(raw, ['id', 'name', 'instruction', 'position', 'activeWays', 'ways', 'crossovers', 'disabledFilters', 'rew', 'inputEq'], `Step ${index + 1}`);
         const id = text(raw.id, 64, `Step ${index + 1} id`, `M${String(index + 1).padStart(2, '0')}`);
         if (ids.has(id)) throw new Error(`Duplicate step id '${id}'`);
         ids.add(id);
@@ -312,12 +320,16 @@ function normalizeBatch(input) {
             .some(name => [...inputEqState.GEQ_NAMES, ...inputModel.GLOBAL_EQ_SLOT_NAMES].includes(name))) {
             throw new Error(`Step ${id} cannot combine inputEq with disabledFilters targeting input EQ; use enabled instead`);
         }
+        const activeWays = normalizeWayList(raw.activeWays, `Step ${id} activeWays`);
+        if (version >= 3) for (const key of [...Object.keys(ways), ...Object.keys(crossovers)]) {
+            if (!activeWays.includes(key)) throw new Error(`Step ${id} changes ${key} but does not include it in activeWays`);
+        }
         return {
             id,
             name: stepName,
             instruction: text(raw.instruction, 1000, `Step ${id} instruction`),
             position: text(raw.position, 240, `Step ${id} position`),
-            activeWays: normalizeWayList(raw.activeWays, `Step ${id} activeWays`),
+            activeWays,
             ways,
             crossovers,
             ...(inputEq ? { inputEq } : {}),
@@ -621,12 +633,14 @@ function applyOutputPeq(config, wayKey, peqs, version) {
 function activeInputEqResponse(config, frequency) {
     const mixer = firstMixerIndex(config);
     const names = new Set((config.pipeline || []).slice(0, mixer).filter(stage =>
-        stage?.type === 'Filter' && stage.bypassed !== true
+        stage?.type === 'Filter' && stage.bypassed !== true &&
+        stepChannels(stage).includes(0) && stepChannels(stage).includes(1)
     ).flatMap(stage => stage.names || []));
     const rate = Number(config.devices.samplerate);
-    return [...inputEqState.GEQ_NAMES, ...inputModel.GLOBAL_EQ_SLOT_NAMES].reduce((sum, name) => {
-        if (!names.has(name)) return sum;
+    return [...names].reduce((sum, name) => {
+        if (config.filters[name]?.type !== 'Biquad' || !inputModel.EQ_TYPES.includes(config.filters[name]?.parameters?.type)) return sum;
         const p = config.filters[name]?.parameters;
+        if (![p.freq, p.gain, p.q].every(Number.isFinite)) throw new Error(`Input EQ '${name}' has invalid parameters`);
         return sum + inputModel.rawResponseAt({ type: p.type, frequency: p.freq, gain: p.gain, q: p.q }, frequency, rate);
     }, 0);
 }
@@ -653,12 +667,47 @@ function applyInputEq(config, baseline, candidate) {
         }
     }
     inputEqState.rebuild(config, state, { fitGeq: !!candidate.geq?.targets });
-    // A candidate may attenuate freely, but it must not add more than 3 dB
-    // anywhere across the input EQ chain relative to the captured baseline.
-    for (let i = 0; i <= 160; i++) {
-        const frequency = 20 * (1000 ** (i / 160));
-        const delta = activeInputEqResponse(config, frequency) - activeInputEqResponse(baseline, frequency);
-        if (delta > 3.05) throw new Error(`Input EQ candidate boosts the captured response by ${delta.toFixed(1)} dB at ${frequency.toFixed(0)} Hz; maximum is +3 dB`);
+}
+
+function activeOutputPeqResponse(config, wayKey, frequency) {
+    const mixer = firstMixerIndex(config);
+    const channel = WAY_DEFS[wayKey].channel;
+    const names = new Set((config.pipeline || []).slice(mixer + 1)
+        .filter(stage => stage?.type === 'Filter' && stage.bypassed !== true && stepChannels(stage).includes(channel))
+        .flatMap(stage => stage.names || []));
+    const prefix = `USER_CH${channel}_PEQ_`;
+    const rate = Number(config.devices.samplerate);
+    return [...names].filter(name => name.startsWith(prefix)).reduce((sum, name) => {
+        const p = config.filters[name]?.parameters;
+        if (!p || !inputModel.EQ_TYPES.includes(p.type)) throw new Error(`${WAY_DEFS[wayKey].label} PEQ '${name}' is not a supported EQ filter`);
+        if (![p.freq, p.gain, p.q].every(Number.isFinite)) throw new Error(`${WAY_DEFS[wayKey].label} PEQ '${name}' has invalid parameters`);
+        return sum + inputModel.rawResponseAt({ type: p.type, frequency: p.freq, gain: p.gain, q: p.q }, frequency, rate);
+    }, 0);
+}
+
+function assertV3CandidateBoost(baseline, candidate, activeWays) {
+    // Evaluate input EQ, output PEQ and way gain together. Separate +3 dB
+    // allowances would stack into a much larger acoustic candidate. The
+    // spectral check also catches switching off a deep cut or changing its
+    // frequency/type while leaving the gain parameter numerically unchanged.
+    for (const wayKey of activeWays) {
+        const baselineName = gainFilterName(baseline, wayKey);
+        const nextName = gainFilterName(candidate, wayKey);
+        const oldGain = Number(baseline.filters[baselineName].parameters?.gain);
+        const nextGain = Number(candidate.filters[nextName].parameters?.gain);
+        if (!Number.isFinite(oldGain) || !Number.isFinite(nextGain) ||
+            baseline.filters[baselineName].parameters?.scale !== 'dB' || candidate.filters[nextName].parameters?.scale !== 'dB') {
+            throw new Error(`${WAY_DEFS[wayKey].label} requires a valid dB Gain filter for version 3 candidates`);
+        }
+        for (let i = 0; i <= 160; i++) {
+            const frequency = 20 * (1000 ** (i / 160));
+            const boost = nextGain - oldGain +
+                activeInputEqResponse(candidate, frequency) - activeInputEqResponse(baseline, frequency) +
+                activeOutputPeqResponse(candidate, wayKey, frequency) - activeOutputPeqResponse(baseline, wayKey, frequency);
+            if (boost > 3.05) {
+                throw new Error(`${WAY_DEFS[wayKey].label} candidate boosts the captured EQ and gain response by ${boost.toFixed(1)} dB at ${frequency.toFixed(0)} Hz; maximum is +3 dB`);
+            }
+        }
     }
 }
 
@@ -739,6 +788,10 @@ function applyStep(baselineConfig, batchInput, stepOrIndex) {
     for (const [wayKey, override] of Object.entries(step.ways || {})) {
         if (override.phase) applyPhase(next, wayKey, override.phase);
         if (override.peq) applyOutputPeq(next, wayKey, override.peq, batch.version);
+    }
+
+    if (batch.version >= 3 && (step.inputEq || Object.values(step.ways || {}).some(way => way.gainDb != null || way.peq))) {
+        assertV3CandidateBoost(baselineConfig, next, step.activeWays);
     }
 
     return next;
