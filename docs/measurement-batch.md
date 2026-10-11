@@ -192,6 +192,7 @@ Human aliases such as `MID L`, `MID-L`, `HIGH R` are accepted and normalized.
 
 - `delayMs`: absolute delay for the measurement.
 - `delayOffsetMs`: offset from the captured baseline delay. Cannot be used together with `delayMs`.
+- For a way with more than one post-routing Delay, the runner selects the independent Delay in the same output stage as that way's Gain. It refuses an ambiguous stage or a Delay filter also used by another output; shared protection-path Delays remain unchanged.
 - `polarity`: `normal` or `inverted`.
 - `gainOffsetDb`: attenuation relative to baseline; positive values are rejected.
 - `phase`: variable phase trim from `-179..0°` implemented with a first-order all-pass. `0°` removes the E-Stack phase filter for that step.

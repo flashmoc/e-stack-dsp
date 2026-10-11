@@ -275,7 +275,37 @@ function gainFilterName(config, wayKey) {
 }
 
 function delayFilterName(config, wayKey) {
-    return uniqueWayFilter(config, wayKey, filter => filter?.type === 'Delay', 'Delay');
+    const channel = WAY_DEFS[wayKey].channel;
+    const matches = matchingWayFilters(config, wayKey, filter => filter?.type === 'Delay');
+    // Protection stages can contain an additional Delay (sometimes the same
+    // zero-ms filter on every output). Prefer the delay in the independent
+    // way stage alongside its Gain; never change a filter shared with another
+    // output, even if it is the only Delay on this way.
+    const gainName = gainFilterName(config, wayKey);
+    const pipeline = config?.pipeline || [];
+    const wayStageDelays = [];
+    for (let index = firstMixerIndex(config) + 1; index < pipeline.length; index += 1) {
+        const stage = pipeline[index];
+        if (stage?.type !== 'Filter' || !Array.isArray(stage.names)) continue;
+        if (stepChannels(stage).length !== 1 || !stepChannels(stage).includes(channel)) continue;
+        if (!stage.names.includes(gainName)) continue;
+        for (const name of stage.names) {
+            if (config?.filters?.[name]?.type === 'Delay' && !wayStageDelays.includes(name)) wayStageDelays.push(name);
+        }
+    }
+    const candidates = matches.length === 1 ? matches : wayStageDelays;
+    if (candidates.length !== 1) {
+        throw new Error(`${WAY_DEFS[wayKey].label} requires exactly one independent way Delay filter after routing; found ${candidates.length}`);
+    }
+    const name = candidates[0];
+    for (let index = firstMixerIndex(config) + 1; index < pipeline.length; index += 1) {
+        const stage = pipeline[index];
+        if (stage?.type !== 'Filter' || !Array.isArray(stage.names) || !stage.names.includes(name)) continue;
+        if (stepChannels(stage).some(other => other !== channel)) {
+            throw new Error(`${WAY_DEFS[wayKey].label} Delay filter '${name}' is shared with another output`);
+        }
+    }
+    return name;
 }
 
 function crossoverMatches(config, wayKey, side) {
